@@ -229,3 +229,78 @@ The seed derives every counter from the edges it creates, recomputes counters fo
 touches (an earlier version incremented them and drifted on re-runs, caught by a consistency check), and
 is deterministic (all randomness goes through a seeded faker; `Math.random` defeated that in the first
 version).
+
+## Home feed (Phase 5)
+
+Full design and trade-off table: [docs/caching-strategy.md](docs/caching-strategy.md).
+
+### The design in one paragraph
+
+Hybrid fan-out. Ordinary posts are **pushed**: a BullMQ worker writes the post id into each follower's
+Redis sorted set (score = createdAt), capped at 800. Celebrity posts (author ≥ 10k followers at publish
+time) are flagged `fanoutSkipped` and **pulled** at read time through a partial index holding only those
+posts. A page = timeline entries ∪ pulled entries, merged by `(createdAt, _id)`, then hydrated with
+visibility re-checked. MongoDB is the source of truth: missing timelines are rebuilt from it, pages past
+the cap continue from it, and if Redis is down the whole feed comes from it.
+
+### Likely questions
+
+**Q: Why not just pull?** `posts.find({ authorId: { $in: following } }).sort(...)` is a SORT_MERGE over one
+index range per followee. Cost grows with the number followed (see the benchmark), and it's paid on every
+page load, which happen far more often than posts.
+
+**Q: Why not just push?** One post by an account with 10M followers would be 10M Redis writes. Push cost is
+proportional to followers, pull cost to followings; the hybrid caps both.
+
+**Q: What does a timeline store?** Ids only. Content is hydrated per request, which also re-checks blocks,
+privacy and deletion. That is why invalidation can be lazy (delete and rebuild) without ever leaking.
+
+**Q: What if Redis loses everything?** Every timeline is rebuilt from MongoDB on its owner's next read.
+A thundering herd after a full flush is the risk: the per-user rebuild lock prevents duplicate rebuilds for
+one user, and readers that lose the lock are served straight from MongoDB.
+
+**Q: How do you paginate across two sources?** One cursor format, `(t, id)` = (createdAt ms, _id), used by
+MongoDB (`createdAt < t OR (createdAt = t AND _id < id)`) and Redis (`ZRANGE ... BYSCORE REV` from `t`,
+skipping ties at `t` with id ≥ cursor id). Both sort identically (ties broken by id descending), so the
+merge is a plain k-way merge and a page can mix sources. Scrolling past the 800-entry cap continues from
+MongoDB with the same cursor. Tested with 830 posts.
+
+**Q: How do you know there's a next page without counting?** Each source returns `limit + 1`; if the merged
+list has more than `limit`, there is.
+
+**Q: Ranking later?** `FeedRanker` sits between merge and pagination (chronological = identity). A real
+ranker changes the cursor: "older than t" no longer describes the next page, so you'd paginate by
+(score, id) or snapshot a ranked candidate list per session.
+
+### Bugs found while building it (good interview stories)
+
+1. **Redis deletes empty sorted sets.** A user whose followees hadn't posted got an empty timeline and the key
+   vanished. Fan-out only writes to existing timelines, so it skipped them, and every read rebuilt. Fix: a
+   permanent `~anchor` member at a negative score (rank 0; trimming starts at rank 1).
+2. **Celebrity status changing under a stale cache.** Readers decided "who is a celebrity" from a cached
+   author list. When an author crossed the threshold, their next post was neither pushed (writer: celebrity)
+   nor pulled (stale reader: not a celebrity). Fix: record the decision on the post (`fanoutSkipped`) and pull
+   exactly those posts. Correct in both directions, and the reader no longer needs follower counts.
+3. **BullMQ 6 rejects `:` in custom job ids**, so every enqueue threw. Feed errors are deliberately logged,
+   not thrown (feed upkeep must never fail a post), and rebuilds made feeds look right, so fan-out was
+   completely broken while every visible test passed. Fix: `-` separator, plus a test asserting jobs
+   complete. Lesson: graceful degradation needs a test that fails loudly when the background path breaks.
+4. **Cache-fill races,** handled by design rather than found: a post published mid-rebuild (the rebuild
+   creates its key first, so fan-out lands in it) and an unfollow mid-rebuild (version counter checked
+   atomically at commit). Both are tested by pausing a real rebuild between its MongoDB query and its
+   Redis write.
+
+All four guards, plus the rebuild lock, were mutation-checked: removing each makes its test fail.
+
+### Complexity summary
+
+| Operation                   | Cost                                                                       |
+| --------------------------- | -------------------------------------------------------------------------- |
+| Read a page (timeline path) | O(log T + L) Redis + O(F_celeb + L) MongoDB + hydration (constant queries) |
+| Read a page (pull path)     | O(F) index seeks + O(L)                                                    |
+| Publish (ordinary author)   | O(1) on the request; O(followers) in the worker, batched 500 per pipeline  |
+| Publish (celebrity)         | O(1)                                                                       |
+| Follow / unfollow           | O(1): delete the timeline; O(F + T) later on rebuild                       |
+| Memory                      | ~64 B × 800 ≈ 50 KB per **active** user (inactive timelines expire)        |
+
+F = followings, T = timeline size, L = page size.

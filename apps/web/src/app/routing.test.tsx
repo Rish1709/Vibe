@@ -38,11 +38,65 @@ describe('route guards', () => {
   });
 
   it('renders the app shell with navigation to the user’s own profile', async () => {
-    mockApi({ 'GET /api/v1/users/me': () => ({ json: { data: makeMe() } }) });
+    mockApi({
+      'GET /api/v1/users/me': () => ({ json: { data: makeMe() } }),
+      'GET /api/v1/feed': () => ({ json: { data: [], meta: { nextCursor: null } } }),
+    });
     renderAt('/');
     expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(nav.querySelector('a[href="/ada"]')).not.toBeNull();
+    expect(await screen.findByText('Your feed is quiet')).toBeInTheDocument();
+  });
+
+  it('shows the home feed and loads the next page with its cursor', async () => {
+    const grace = {
+      id: 'e'.repeat(24),
+      username: 'grace',
+      displayName: 'Grace Hopper',
+      avatarUrl: null,
+    };
+    const viewerFlags = { liked: false, bookmarked: false, reposted: false, isAuthor: false };
+    const calls = mockApi({
+      'GET /api/v1/users/me': () => ({ json: { data: makeMe() } }),
+      'GET /api/v1/feed': () => {
+        const isSecondPage =
+          calls.filter((call) => call.path.startsWith('/api/v1/feed')).length > 1;
+        return isSecondPage
+          ? {
+              json: {
+                data: [makePost({ text: 'older post', author: grace, viewer: viewerFlags })],
+                meta: { nextCursor: null },
+              },
+            }
+          : {
+              json: {
+                data: [makePost({ text: 'newest post', author: grace, viewer: viewerFlags })],
+                meta: { nextCursor: 'CURSOR1' },
+              },
+            };
+      },
+    });
+    // jsdom has no layout, so the infinite-scroll sentinel never intersects; trigger it explicitly.
+    const observed: IntersectionObserverCallback[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          observed.push(callback);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    renderAt('/');
+    expect(await screen.findByText('newest post')).toBeInTheDocument();
+
+    for (const callback of observed) {
+      callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+    }
+    expect(await screen.findByText('older post')).toBeInTheDocument();
+    expect(calls.some((call) => call.path === '/api/v1/feed?cursor=CURSOR1')).toBe(true);
   });
 
   it('shows a dedicated screen for deleted accounts', async () => {

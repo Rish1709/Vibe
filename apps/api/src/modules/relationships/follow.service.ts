@@ -5,6 +5,7 @@ import { keysetFilter, keysetPage, keysetSort } from '../../lib/keyset.js';
 import { canFollow, canSeeProfile, canViewContent } from '../../policies/visibility.js';
 import { adjustFollowCounts, findUserSummaries, requireActiveUser } from '../users/user.queries.js';
 import type { AuthUser } from '../users/user.service.js';
+import type { FeedWriter } from '../feed/feed.writer.js';
 import { FollowModel, type FollowRecord } from './follow.model.js';
 import { getRelationship, getRelationships, isBlockedEitherWay } from './relationship.service.js';
 
@@ -15,7 +16,7 @@ interface PageInput {
 
 export type FollowService = ReturnType<typeof createFollowService>;
 
-export function createFollowService() {
+export function createFollowService({ feed }: { feed: FeedWriter }) {
   /** Converts edges into user list items, dropping deleted accounts, with the viewer's follow state. */
   async function toUserList(
     viewer: AuthUser,
@@ -99,6 +100,8 @@ export function createFollowService() {
         }
         throw Errors.forbidden("You can't follow this account");
       }
+      // A new active followee's posts should appear: rebuild the follower's timeline lazily.
+      if (status === 'active') await feed.onGraphChanged([viewer.id]);
       return { following: status };
     },
 
@@ -108,7 +111,10 @@ export function createFollowService() {
         { followerId: viewer.id, followeeId: targetId },
         { projection: { status: 1 } },
       ).lean();
-      if (removed?.status === 'active') await adjustFollowCounts(viewer.id, targetId, -1);
+      if (removed?.status === 'active') {
+        await adjustFollowCounts(viewer.id, targetId, -1);
+        await feed.onGraphChanged([viewer.id]);
+      }
       return { following: 'none' };
     },
 
@@ -117,7 +123,10 @@ export function createFollowService() {
         { followerId, followeeId: viewer.id },
         { projection: { status: 1 } },
       ).lean();
-      if (removed?.status === 'active') await adjustFollowCounts(followerId, viewer.id, -1);
+      if (removed?.status === 'active') {
+        await adjustFollowCounts(followerId, viewer.id, -1);
+        await feed.onGraphChanged([followerId]);
+      }
     },
 
     /** The pending -> active transition is a conditional update, so double-accepts count once. */
@@ -129,6 +138,7 @@ export function createFollowService() {
       ).lean();
       if (!accepted) throw Errors.notFound('Follow request not found');
       await adjustFollowCounts(accepted.followerId, viewer.id, 1);
+      await feed.onGraphChanged([accepted.followerId.toHexString()]);
     },
 
     async declineRequest(viewer: AuthUser, requestId: string): Promise<void> {

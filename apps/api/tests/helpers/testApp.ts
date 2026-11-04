@@ -1,6 +1,7 @@
 import { Redis } from 'ioredis';
 import { pino } from 'pino';
 import { createApp, type AppDependencies } from '../../src/app.js';
+import { createRecordingFeedQueue } from '../../src/modules/feed/feed.queue.js';
 
 export const silentLogger = pino({ level: 'silent' });
 
@@ -10,6 +11,8 @@ export const testConfig: AppDependencies['config'] = {
   REQUEST_TIMEOUT_MS: 5_000,
   // All test files share one client IP and one Redis; per-user limits stay at production values.
   RATE_LIMIT_ANONYMOUS_PER_MINUTE: 1_000_000,
+  // Low, so tests can create celebrity authors with a handful of followers.
+  FEED_CELEBRITY_THRESHOLD: 3,
   CLERK_WEBHOOK_SIGNING_SECRET: undefined,
 };
 
@@ -28,6 +31,7 @@ export function buildTestApp(overrides: Partial<AppDependencies> = {}) {
     redis: new Redis({ lazyConnect: true }),
     tokenVerifier: { verify: neverUsed('tokenVerifier') },
     identityProvider: { getUser: neverUsed('identityProvider') },
+    feedQueue: createRecordingFeedQueue(),
     ...overrides,
   });
 }

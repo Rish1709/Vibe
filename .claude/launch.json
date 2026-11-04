@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:api"],
       "port": 4000
+    },
+    {
+      "name": "worker",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:worker"],
+      "port": 0
     }
   ]
 }

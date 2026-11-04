@@ -7,6 +7,7 @@ import {
   signSessionToken,
   testTokenVerifier,
 } from './auth.js';
+import type { AppDependencies } from '../../src/app.js';
 import { buildTestApp } from './testApp.js';
 
 export interface TestUser {
@@ -21,12 +22,13 @@ export interface TestUser {
  * A small world of real, onboarded users driven through the public API, so social tests exercise
  * the same paths clients do instead of writing documents directly.
  */
-export function createWorld(redis: Redis) {
+export function createWorld(redis: Redis, overrides: Partial<AppDependencies> = {}) {
   const identity = createTestIdentityProvider();
   const app = buildTestApp({
     redis,
     tokenVerifier: testTokenVerifier,
     identityProvider: identity.provider,
+    ...overrides,
   });
 
   async function user(username: string, { isPrivate = false } = {}): Promise<TestUser> {

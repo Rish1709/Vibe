@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { parseEnv } from './config/env.js';
 import { createClerkTokenVerifier } from './infra/clerk.js';
 import { createLogger } from './infra/logger.js';
+import { createFeedQueue } from './modules/feed/feed.queue.js';
 import { createClerkIdentityProvider } from './modules/users/identity.js';
 import { connectMongo, disconnectMongo, pingMongo } from './infra/mongo.js';
 import { createRedisClient } from './infra/redis.js';
@@ -20,6 +21,10 @@ async function main(): Promise<void> {
 
   const redis = createRedisClient(env.REDIS_URL, { name: 'api', logger });
   await redis.connect();
+  // A separate connection for the job queue, so queue traffic can't delay cache and rate-limit calls.
+  const queueRedis = createRedisClient(env.REDIS_URL, { name: 'queue', logger });
+  await queueRedis.connect();
+  const feedQueue = createFeedQueue(queueRedis, env.QUEUE_PREFIX);
 
   if (!env.CLERK_WEBHOOK_SIGNING_SECRET) {
     logger.warn('CLERK_WEBHOOK_SIGNING_SECRET is not set: account deletions will not sync');
@@ -37,6 +42,7 @@ async function main(): Promise<void> {
       logger,
     }),
     identityProvider: createClerkIdentityProvider(env.CLERK_SECRET_KEY),
+    feedQueue,
     healthChecks: {
       mongo: pingMongo,
       redis: async () => {
@@ -71,6 +77,13 @@ async function main(): Promise<void> {
             server.close((err) => (err ? reject(err) : resolve()));
             server.closeIdleConnections();
           }),
+      },
+      {
+        name: 'queue',
+        run: async () => {
+          await feedQueue.close();
+          await queueRedis.quit();
+        },
       },
       {
         name: 'redis',

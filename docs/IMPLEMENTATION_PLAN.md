@@ -70,6 +70,23 @@ were mutation-checked (each fails when its guard is removed).
 Tests: shared 27, API 113, web 27. Mutation-checked: like counting, follow/block race (both
 guards), and read-time visibility in hydration.
 
-## Phases 5–10
+## Phase 5: Home feed
+
+- [x] Hybrid fan-out: push to Redis timelines for ordinary authors, pull for celebrity posts
+      (`fanoutSkipped` flag + partial index), merged by one `(createdAt, _id)` cursor
+- [x] BullMQ fan-out queue (deterministic job ids, retries with backoff) and a separate worker process
+- [x] Timeline store: capped sorted sets of ids, lazy creation, TTL, conditional writes in Lua
+- [x] Rebuild on demand with stampede lock, mid-rebuild publish capture, version-checked commit,
+      crash-safe placeholder, permanent anchor against empty-set deletion
+- [x] Invalidation on follow / unfollow / accept / remove follower / block
+- [x] Read-your-writes for the author; seamless continuation from MongoDB past the cap
+- [x] Redis outage: feed served from MongoDB (tested against a dead Redis)
+- [x] Frontend home feed with infinite scroll; composer refreshes it
+- [x] Benchmark script with measured numbers (`npm run bench:feed -w @vibe/api`)
+- [ ] Transactional outbox for publish events (documented upgrade path)
+
+Mutation-checked: job id format, rebuild placeholder, rebuild version check, celebrity flag, rebuild lock.
+
+## Phases 6–10
 
 See the roadmap in `README.md`.

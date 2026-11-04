@@ -115,6 +115,9 @@ export function useBlock(profile: { id: string; username: string }) {
       apiRequest(`/api/v1/users/${profile.id}/block`, { method: block ? 'PUT' : 'DELETE' }),
     onSuccess: (_data, block) => {
       toast.success(block ? `Blocked @${profile.username}` : `Unblocked @${profile.username}`);
+      // Drop their cached posts first: refetching them against the pre-block profile would 403.
+      // They are requested again only if the refreshed profile says the viewer may see them.
+      queryClient.removeQueries({ queryKey: queryKeys.userPosts(profile.id) });
       // A block removes follows both ways and hides content everywhere, so refetch broadly.
       void queryClient.invalidateQueries();
     },

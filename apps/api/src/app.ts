@@ -19,6 +19,11 @@ import { createHealthRouter } from './modules/health/health.routes.js';
 import type { HealthCheck } from './modules/health/health.service.js';
 import type { IdentityProvider } from './modules/users/identity.js';
 import { createCommentService } from './modules/comments/comment.service.js';
+import type { FeedQueue } from './modules/feed/feed.queue.js';
+import { createFeedRouter } from './modules/feed/feed.routes.js';
+import { createFeedService } from './modules/feed/feed.service.js';
+import { createFeedWriter } from './modules/feed/feed.writer.js';
+import { createTimelineStore } from './modules/feed/timeline.store.js';
 import { createEngagementService } from './modules/engagement/engagement.service.js';
 import { createContentRouters } from './modules/posts/content.routes.js';
 import { createPostService } from './modules/posts/post.service.js';
@@ -36,6 +41,7 @@ export interface AppDependencies {
     | 'TRUST_PROXY'
     | 'REQUEST_TIMEOUT_MS'
     | 'RATE_LIMIT_ANONYMOUS_PER_MINUTE'
+    | 'FEED_CELEBRITY_THRESHOLD'
     | 'CLERK_WEBHOOK_SIGNING_SECRET'
   >;
   logger: Logger;
@@ -44,6 +50,8 @@ export interface AppDependencies {
   /** Infrastructure boundaries are injected so tests can supply local implementations. */
   tokenVerifier: TokenVerifier;
   identityProvider: IdentityProvider;
+  /** Where fan-out jobs go. The API only produces; worker.ts consumes. */
+  feedQueue: FeedQueue;
 }
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,128}$/;
@@ -60,10 +68,19 @@ export function createApp({
   redis,
   tokenVerifier,
   identityProvider,
+  feedQueue,
 }: AppDependencies): Express {
   const users = createUserService({ redis, logger, identity: identityProvider });
   const auth = createAuthMiddleware(tokenVerifier, users);
   const limiter = createRedisRateLimiter(redis);
+  const timeline = createTimelineStore(redis);
+  const feedWriter = createFeedWriter({
+    timeline,
+    queue: feedQueue,
+    celebrityThreshold: config.FEED_CELEBRITY_THRESHOLD,
+    logger,
+  });
+  const feed = createFeedService({ redis, logger, timeline });
 
   const app = express();
 
@@ -112,7 +129,13 @@ export function createApp({
     cors({
       origin: config.CORS_ORIGINS,
       credentials: true,
-      exposedHeaders: ['X-Request-Id', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'Retry-After'],
+      exposedHeaders: [
+        'X-Request-Id',
+        'X-RateLimit-Limit',
+        'X-RateLimit-Remaining',
+        'Retry-After',
+        'X-Feed-Source',
+      ],
     }),
   );
 
@@ -137,7 +160,7 @@ export function createApp({
   const api = express.Router();
   api.use(auth.requireAuth, rateLimit(limiter, RateLimits.authenticated));
   const { postRouter, commentRouter, userContentRouter } = createContentRouters({
-    posts: createPostService(),
+    posts: createPostService({ feed: feedWriter }),
     engagement: createEngagementService(),
     comments: createCommentService(),
     auth,
@@ -148,14 +171,15 @@ export function createApp({
   api.use(
     '/users',
     createRelationshipRouter({
-      follows: createFollowService(),
-      blocks: createBlockService(),
+      follows: createFollowService({ feed: feedWriter }),
+      blocks: createBlockService({ feed: feedWriter }),
       auth,
       limiter,
     }),
   );
   api.use('/posts', postRouter);
   api.use('/comments', commentRouter);
+  api.use('/feed', createFeedRouter({ feed, auth }));
   app.use('/api/v1', api);
 
   app.use(notFound);

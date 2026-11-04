@@ -12,6 +12,7 @@ export const queryKeys = {
   post: (id: string) => ['posts', 'detail', id] as const,
   userPosts: (userId: string) => ['posts', 'user', userId] as const,
   bookmarks: ['posts', 'bookmarks'] as const,
+  feed: ['posts', 'feed'] as const,
 
   comments: (postId: string) => ['comments', postId] as const,
   replies: (commentId: string) => ['replies', commentId] as const,

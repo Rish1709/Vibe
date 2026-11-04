@@ -24,6 +24,15 @@ export function useUserPosts(userId: string, enabled: boolean) {
   });
 }
 
+/** The home feed. Cursor-paginated server-side, so scrolling never re-sorts or re-fetches earlier pages. */
+export function useFeed() {
+  return useInfiniteQuery({
+    queryKey: queryKeys.feed,
+    queryFn: ({ pageParam, signal }) => fetchPage<PostDto>('/api/v1/feed', pageParam, signal),
+    ...pageOptions,
+  });
+}
+
 export function useBookmarks() {
   return useInfiniteQuery({
     queryKey: queryKeys.bookmarks,
@@ -40,6 +49,8 @@ export function useCreatePost() {
       (await apiRequest<PostDto>('/api/v1/posts', { method: 'POST', body: input })).data,
     onSuccess: (post) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.userPosts(post.author.id) });
+      // The API adds the post to the author's own timeline synchronously, so a refetch shows it on top.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.feed });
       void queryClient.invalidateQueries({ queryKey: queryKeys.me });
       if (post.sharedPost) {
         updatePostEverywhere(queryClient, post.sharedPost.id, (p) => ({

@@ -4,6 +4,7 @@ import { Errors, isDuplicateKeyError } from '../../lib/errors.js';
 import { keysetFilter, keysetPage, keysetSort } from '../../lib/keyset.js';
 import { adjustFollowCounts, findUserSummaries, requireActiveUser } from '../users/user.queries.js';
 import type { AuthUser } from '../users/user.service.js';
+import type { FeedWriter } from '../feed/feed.writer.js';
 import { BlockModel, type BlockRecord } from './block.model.js';
 import { FollowModel } from './follow.model.js';
 
@@ -28,7 +29,7 @@ async function removeEdgesBetween(a: Types.ObjectId, b: Types.ObjectId, session?
   }
 }
 
-export function createBlockService() {
+export function createBlockService({ feed }: { feed: FeedWriter }) {
   return {
     /**
      * A transaction, because blocking must be all-or-nothing: the block row, removal of follow edges in
@@ -64,6 +65,8 @@ export function createBlockService() {
       }
 
       await removeEdgesBetween(me, them);
+      // Neither side may see the other in their feed from now on.
+      await feed.onGraphChanged([viewer.id, targetId]);
     },
 
     /** Unblocking does not restore previous follows; either side must follow again. */

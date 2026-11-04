@@ -9,6 +9,7 @@ import { Types } from 'mongoose';
 import { Errors, isDuplicateKeyError } from '../../lib/errors.js';
 import { keysetFilter, keysetPage, keysetSort } from '../../lib/keyset.js';
 import { canReshare, canSeeProfile, canViewContent } from '../../policies/visibility.js';
+import type { FeedWriter } from '../feed/feed.writer.js';
 import { getRelationship } from '../relationships/relationship.service.js';
 import { UserModel } from '../users/user.model.js';
 import { requireActiveUser } from '../users/user.queries.js';
@@ -38,7 +39,7 @@ async function incrementReposts(postId: Types.ObjectId | string, delta: 1 | -1) 
 
 export type PostService = ReturnType<typeof createPostService>;
 
-export function createPostService() {
+export function createPostService({ feed }: { feed: FeedWriter }) {
   async function hydrateOne(viewer: AuthUser, post: PostRecord): Promise<PostDto> {
     const [dto] = await hydratePosts(viewer.id, [post]);
     if (!dto) throw Errors.notFound('Post not found');
@@ -60,8 +61,10 @@ export function createPostService() {
   return {
     async create(viewer: AuthUser, input: CreatePostInput): Promise<PostDto> {
       const quoted = input.quotedPostId ? await loadReshareable(viewer, input.quotedPostId) : null;
+      const fanoutSkipped = await feed.shouldSkipFanout(viewer.id);
       const created = await PostModel.create({
         authorId: viewer.id,
+        ...(fanoutSkipped && { fanoutSkipped }),
         kind: quoted ? 'quote' : 'original',
         text: input.text,
         hashtags: extractHashtags(input.text),
@@ -70,6 +73,7 @@ export function createPostService() {
       await Promise.all([
         incrementPostCount(viewer.id, 1),
         quoted ? incrementReposts(quoted._id, 1) : Promise.resolve(),
+        feed.onPostPublished(created),
       ]);
       return hydrateOne(viewer, created.toObject<PostRecord>());
     },
@@ -100,14 +104,15 @@ export function createPostService() {
       const deleted = await PostModel.findOneAndUpdate(
         { _id: postId, authorId: viewer.id, deletedAt: null, kind: { $ne: 'repost' } },
         { $set: { deletedAt: new Date() } },
-        { projection: { kind: 1, sharedPostId: 1 } },
-      ).lean<Pick<PostRecord, 'kind' | 'sharedPostId'>>();
+        { projection: { kind: 1, sharedPostId: 1, authorId: 1, createdAt: 1 } },
+      ).lean<Pick<PostRecord, '_id' | 'kind' | 'sharedPostId' | 'authorId' | 'createdAt'>>();
       if (!deleted) throw Errors.notFound('Post not found');
       await Promise.all([
         incrementPostCount(viewer.id, -1),
         deleted.kind === 'quote' && deleted.sharedPostId
           ? incrementReposts(deleted.sharedPostId, -1)
           : Promise.resolve(),
+        feed.onPostRemoved(deleted),
       ]);
     },
 
@@ -137,13 +142,24 @@ export function createPostService() {
     /** Idempotent: the partial unique index allows one plain repost per user per post. */
     async repost(viewer: AuthUser, postId: string): Promise<ToggleResultDto> {
       const target = await loadReshareable(viewer, postId);
+      let created;
       try {
-        await PostModel.create({ authorId: viewer.id, kind: 'repost', sharedPostId: target._id });
+        const fanoutSkipped = await feed.shouldSkipFanout(viewer.id);
+        created = await PostModel.create({
+          authorId: viewer.id,
+          kind: 'repost',
+          sharedPostId: target._id,
+          ...(fanoutSkipped && { fanoutSkipped }),
+        });
       } catch (err) {
         if (!isDuplicateKeyError(err)) throw err;
         return { active: true, count: Math.max(0, target.counts.reposts) };
       }
-      const updated = await incrementReposts(target._id, 1);
+      const [updated] = await Promise.all([
+        incrementReposts(target._id, 1),
+        // A repost appears in the reposter's followers' feeds like any post.
+        feed.onPostPublished(created),
+      ]);
       return { active: true, count: Math.max(0, updated?.counts.reposts ?? 0) };
     },
 
@@ -154,6 +170,7 @@ export function createPostService() {
         kind: 'repost',
         sharedPostId: postId,
       }).lean();
+      if (removed) await feed.onPostRemoved(removed);
       const updated = removed
         ? await incrementReposts(postId, -1)
         : await PostModel.findById(postId, { counts: 1 }).lean<Pick<PostRecord, 'counts'>>();
