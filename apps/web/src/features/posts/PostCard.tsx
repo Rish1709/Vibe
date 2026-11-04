@@ -18,6 +18,7 @@ import { useMe } from '@/features/account/api';
 import { fullDate, timeAgo } from '@/lib/time';
 import { useDeletePost, useTogglePost, useUpdatePost } from './api';
 import { PostComposer } from './PostComposer';
+import { PostMedia } from './PostMedia';
 import { PostText } from './PostText';
 import { QuotedPost, UnavailablePost } from './QuotedPost';
 
@@ -181,10 +182,13 @@ export function PostCard({ post: item }: { post: PostDto }) {
           {editing ? (
             <EditForm post={post} onDone={() => setEditing(false)} />
           ) : (
-            <div className="mt-0.5">
-              <PostText text={post.text} />
-            </div>
+            post.text && (
+              <div className="mt-0.5">
+                <PostText text={post.text} />
+              </div>
+            )
           )}
+          <PostMedia media={post.media} />
           {post.kind === 'quote' &&
             (post.sharedPost ? <QuotedPost post={post.sharedPost} /> : <UnavailablePost />)}
 

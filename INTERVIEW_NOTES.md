@@ -304,3 +304,116 @@ All four guards, plus the rebuild lock, were mutation-checked: removing each mak
 | Memory                      | ~64 B × 800 ≈ 50 KB per **active** user (inactive timelines expire)        |
 
 F = followings, T = timeline size, L = page size.
+
+## Media and stories (Phase 6)
+
+### Upload flow: the API never touches file bytes
+
+1. `POST /media/uploads {purpose, mimeType, size}` validates the declaration and returns signed ImageKit
+   credentials: `signature = HMAC-SHA1(privateKey, token + expire)`, a single-use token, 30-minute expiry,
+   plus the folder (`/vibe/users/{userId}/{purpose}`) and file name (the media id) to use.
+2. The browser uploads directly to ImageKit (XHR, for progress).
+3. `POST /media/uploads/:id/complete {fileId}`: the server fetches ImageKit's **own record** of the file and
+   checks name, folder, MIME type, kind and size before marking it ready.
+
+**Q: Why re-check after upload when you validated before?** The signature proves we authorized _an_
+upload, but the folder, name, type and size are chosen by the client. A malicious client can upload a
+100 MB file after declaring 1 KB, or put it in someone else's folder. Step 1 is for fast feedback; step 3 is
+the security boundary. Tested by simulating each tampering; each is rejected and the stored file deleted.
+
+**Q: Why not proxy uploads through the API?** Proxying doubles bandwidth, ties up API memory and sockets
+for slow uploads, and makes the API the bottleneck. Direct-to-CDN keeps the API stateless and cheap.
+
+**Q: Why no SDK?** Signing is one HMAC and the API needs two REST calls (details, delete). Built-in
+`crypto` and `fetch` are enough, so there's one less dependency to audit and update.
+
+### Media lifecycle and ownership
+
+`pending → ready → attached → released`, each a conditional update. Attaching is `findOneAndUpdate({ status:
+'ready' } → 'attached')`, so two concurrent posts can't share one upload (tested: one 201, one 400). A
+unique index on `fileId` stops one stored file from backing two records. A failed post creation un-claims its
+media so the user can retry with the same uploads.
+
+**Q: How do files get deleted?** A BullMQ job scheduler runs hourly cleanup in the worker: abandoned uploads
+(pending or ready for 24h), released files (deleted posts, replaced avatars, deleted stories), and story
+media 48h after attaching. A record is deleted only after its CDN file is gone (404 counts as gone), so a
+crash or failure just retries next hour. `upsertJobScheduler` is idempotent, so every worker can declare the
+schedule and BullMQ still runs it once per interval.
+
+**Embedding vs referencing:** posts and stories embed a media snapshot (url, kind, dimensions). Media is
+bounded (≤4 per post), always read with its parent, and immutable after upload, so a separate lookup per
+render would only add a query.
+
+### Stories: 24 hours, enforced in queries
+
+Every story query filters `expiresAt > now`. The TTL index (`expireAfterSeconds: 0`) only deletes the
+documents later: MongoDB's TTL monitor runs about once a minute and can lag further under load, so relying on
+it would show stories past their 24 hours. Tested by backdating `expiresAt` on a story the TTL hasn't
+deleted yet: it vanishes from the tray, profile, views and viewer list.
+
+**Tray query:** `{ authorId: { $in: [self, ...followees] }, expiresAt: { $gt: now } }` on index
+`{ authorId: 1, expiresAt: 1 }` (equality then range, the ESR rule), then authors, relationships and the
+viewer's views in batch. Constant query count regardless of followings. Rings with unseen stories sort first.
+
+**Views:** unique `(storyId, viewerId)` plus increment-only-on-insert, the same pattern as likes (tested: 3
+viewers × 2 concurrent views each = 3). Views carry the story's `expiresAt`, so they expire with it. Only the
+author sees the viewer list.
+
+### Delivery: ImageKit transforms
+
+The frontend requests `url?tr=w-640,q-80,f-auto` with a `srcset` of widths, so ImageKit resizes, picks
+WebP/AVIF per browser and caches each variant at the edge. Phones download a ~640 px image instead of the
+original. Video posters come from `.../ik-thumbnail.jpg`.
+
+### Bug found by a test
+
+The story tray put `role="listitem"` on each ring's `<button>`, which overrides the button role: screen
+readers wouldn't announce the rings as clickable. The UI test couldn't find them either, for the same reason.
+Fixed with a real `<ul>`/`<li>` around buttons.
+
+**Mutation-checked:** query-time expiry, view dedup, the upload folder check, atomic claiming.
+
+### Bugs found in live testing (not by the tests)
+
+**Old posts crashed the feed.** Posts written before Phase 6 had no `media` field. Mongoose fills
+schema defaults when it builds documents, but `.lean()` reads return the raw BSON, so `post.media` was
+`undefined` and the hydrator threw on `.map`. Every test created fresh posts, so none had the old shape.
+Fix: fields added after documents existed are typed optional (`media?:`), so the compiler pointed at
+every reader (two: hydration and delete), and a test unsets the field to recreate an old document.
+The general lesson: adding a field is a schema migration even in a "schemaless" database. Either
+backfill it, or make every reader tolerate its absence; doing both is safest.
+
+**A slow ImageKit response became a 500.** The upload verification lookup hit its 5 s timeout and the
+raw `TimeoutError` surfaced as an internal error. Fix: idempotent ImageKit calls (lookup, delete) retry
+once on timeout, network error, 429 or 5xx, with per-attempt timeouts that fit inside the API's request
+timeout. A typed `MediaProviderUnavailableError` becomes a 503 `SERVICE_UNAVAILABLE`. The upload stays
+`pending`, so verification can simply be repeated, and the browser retries it once before giving up
+instead of making the user upload the file again.
+
+## User search (Phase 8 preview)
+
+`GET /api/v1/search/users?q=` finds people by `@username` prefix or by the start of any word in their
+display name ("hop" finds Grace Hopper, "gr hop" too, "jose" finds José).
+
+**Why not a case-insensitive regex?** `/^gra/i` can't be turned into index bounds, so MongoDB scans the
+whole index (or collection) for every keystroke. An anchored, case-sensitive prefix on normalized data
+_can_: `^gra` becomes the range `["gra", "grb")`. So:
+
+- Usernames are already stored lowercase, so the unique `username` index serves `^prefix` directly.
+- Display names are stored a second time as `searchTokens`: the distinct words, lowercased, with
+  accents stripped (NFKD), in a multikey index. Multi-word queries use `$all` of prefixes.
+- Both lookups run in parallel and are merged in memory: exact handle, then handle prefix, then name
+  match; ties by follower count. Verified with `explain()`: IXSCAN, documents examined = returned.
+
+**Keeping the copy correct.** Every write of `displayName` goes through one helper that also writes
+`searchTokens`, so they can't drift. Existing accounts are filled by an idempotent, batched backfill
+(`db:backfill-search`) that re-checks the condition per document, so it never overwrites a rename that
+happened while it ran.
+
+**Privacy.** Private accounts are findable (that's how you request to follow them), flagged with
+`isPrivate` so the UI can show a lock. Accounts that blocked you, or that you blocked, are left out, like
+everywhere else. Queries are regex-escaped (`a.` must not match `axb`) and rate limited.
+
+**Limits and what's next.** Prefix matching only: no typo tolerance and no ranking by relevance beyond the
+rules above. At scale this moves to a search engine (Atlas Search or OpenSearch with edge n-grams),
+fed by change streams. Phase 8 adds posts and hashtags.

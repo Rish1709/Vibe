@@ -21,5 +21,8 @@ export const queryKeys = {
   following: (userId: string) => ['following', userId] as const,
   likers: (postId: string) => ['likers', postId] as const,
   followRequests: ['follow-requests'] as const,
+  storyTray: ['stories', 'tray'] as const,
+  storyViewers: (storyId: string) => ['stories', 'viewers', storyId] as const,
   blocks: ['blocks'] as const,
+  userSearch: (q: string) => ['search', 'users', q] as const,
 };

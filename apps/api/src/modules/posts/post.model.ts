@@ -10,6 +10,26 @@ const postSchema = new Schema(
     text: { type: String, default: '' },
     /** Lowercased, deduplicated, bounded (see extractHashtags), so the multikey index stays small. */
     hashtags: { type: [String], default: [] },
+    /**
+     * Embedded snapshot (bounded: at most 4 images or 1 video). Embedding is right here: media is always
+     * read with its post and never changes after upload, so a separate lookup would only add a query.
+     */
+    media: {
+      type: [
+        new Schema(
+          {
+            mediaId: { type: Schema.Types.ObjectId, required: true },
+            kind: { type: String, enum: ['image', 'video'], required: true },
+            url: { type: String, required: true },
+            thumbnailUrl: { type: String, default: null },
+            width: { type: Number, default: null },
+            height: { type: Number, default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     /** The reposted or quoted post. Embedding a copy would go stale on edit; we reference and hydrate. */
     sharedPostId: { type: Schema.Types.ObjectId, default: null },
     /**
@@ -60,7 +80,14 @@ postSchema.index(
 // "Did the viewer repost these?" batch lookups and repost counts.
 postSchema.index({ sharedPostId: 1, kind: 1 });
 
-export type PostRecord = InferSchemaType<typeof postSchema> & {
+type PostSchemaFields = InferSchemaType<typeof postSchema>;
+
+/**
+ * `.lean()` reads skip schema defaults, so a field added after posts already existed is simply absent
+ * on older documents. Such fields are typed optional so every reader has to handle the missing case.
+ */
+export type PostRecord = Omit<PostSchemaFields, 'media'> & {
+  media?: PostSchemaFields['media'];
   _id: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;

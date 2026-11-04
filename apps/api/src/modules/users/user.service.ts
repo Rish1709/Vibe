@@ -14,10 +14,12 @@ import type { Logger } from '../../infra/logger.js';
 import type { Redis } from '../../infra/redis.js';
 import { Errors, isDuplicateKeyError } from '../../lib/errors.js';
 import { canSeeProfile, canViewContent } from '../../policies/visibility.js';
+import type { MediaService } from '../media/media.service.js';
 import { getRelationship } from '../relationships/relationship.service.js';
 import type { IdentityProfile, IdentityProvider } from './identity.js';
 import { toMe, toPublicProfile } from './user.mapper.js';
 import { UserModel, type UserRecord } from './user.model.js';
+import { searchTokensFor } from './user.search.js';
 
 /** The minimal identity attached to every authenticated request. */
 const authUserSchema = z.object({
@@ -35,15 +37,22 @@ export type AuthUser = z.infer<typeof authUserSchema>;
 const AUTH_USER_TTL_SECONDS = 300;
 const DEFAULT_DISPLAY_NAME = 'New user';
 
+/** Every write of a display name goes through here, so its search keys never drift from it. */
+const nameFields = (displayName: string) => ({
+  displayName,
+  searchTokens: searchTokensFor(displayName),
+});
+
 interface UserServiceDeps {
   redis: Redis;
   logger: Logger;
   identity: IdentityProvider;
+  media: MediaService;
 }
 
 export type UserService = ReturnType<typeof createUserService>;
 
-export function createUserService({ redis, logger, identity }: UserServiceDeps) {
+export function createUserService({ redis, logger, identity, media }: UserServiceDeps) {
   const toAuthUser = (user: UserRecord): AuthUser => ({
     id: user._id.toHexString(),
     clerkId: user.clerkId,
@@ -77,7 +86,7 @@ export function createUserService({ redis, logger, identity }: UserServiceDeps) 
             clerkUpdatedAt: profile.updatedAt,
           },
           // The display name is only seeded from the provider; afterwards the user owns it.
-          $setOnInsert: { displayName: profile.name ?? DEFAULT_DISPLAY_NAME },
+          $setOnInsert: nameFields(profile.name ?? DEFAULT_DISPLAY_NAME),
         },
         { upsert: true },
       );
@@ -141,7 +150,7 @@ export function createUserService({ redis, logger, identity }: UserServiceDeps) 
         { clerkId },
         {
           $set: { deletedAt, clerkUpdatedAt: deletedAt },
-          $setOnInsert: { displayName: 'Deleted user' },
+          $setOnInsert: { displayName: 'Deleted user', searchTokens: [] },
         },
         { upsert: true },
       );
@@ -195,7 +204,7 @@ export function createUserService({ redis, logger, identity }: UserServiceDeps) 
         // The username filter makes this a one-shot transition even under concurrent submits.
         updated = await UserModel.findOneAndUpdate(
           { _id: user.id, username: { $exists: false }, deletedAt: null },
-          { $set: { username: input.username, displayName: input.displayName } },
+          { $set: { username: input.username, ...nameFields(input.displayName) } },
           { returnDocument: 'after' },
         ).lean<UserRecord>();
       } catch (err) {
@@ -208,20 +217,39 @@ export function createUserService({ redis, logger, identity }: UserServiceDeps) 
     },
 
     async updateProfile(user: AuthUser, input: UpdateProfileInput): Promise<MeDto> {
-      const { website, ...rest } = input;
-      const update = { ...rest, ...(website !== undefined && { website: website || null }) };
-      let updated: UserRecord | null;
+      const { website, avatarMediaId, ...rest } = input;
+      const avatar =
+        avatarMediaId === undefined
+          ? undefined
+          : avatarMediaId === null
+            ? null
+            : (await media.claim(user, [avatarMediaId], 'avatar'))[0];
+      const update = {
+        ...rest,
+        ...(rest.displayName !== undefined && nameFields(rest.displayName)),
+        ...(website !== undefined && { website: website || null }),
+        ...(avatar !== undefined && {
+          avatarUrl: avatar?.url ?? null,
+          avatarMediaId: avatar?.mediaId ?? null,
+        }),
+      };
+      let previous: UserRecord | null;
       try {
-        updated = await UserModel.findOneAndUpdate(
+        // Returns the document as it was before, so the replaced avatar can be released.
+        previous = await UserModel.findOneAndUpdate(
           { _id: user.id, deletedAt: null },
           { $set: update },
-          { returnDocument: 'after' },
+          { returnDocument: 'before' },
         ).lean<UserRecord>();
       } catch (err) {
+        if (avatar) await media.unclaim([avatar.mediaId]);
         if (isDuplicateKeyError(err)) throw Errors.usernameTaken();
         throw err;
       }
-      if (!updated) throw Errors.notFound('Account not found');
+      if (!previous) throw Errors.notFound('Account not found');
+      if (avatar !== undefined && previous.avatarMediaId)
+        await media.release([previous.avatarMediaId]);
+      const updated = { ...previous, ...update } as UserRecord;
       if (input.username !== undefined && input.username !== user.username) {
         await invalidateAuthUser(user.clerkId);
       }

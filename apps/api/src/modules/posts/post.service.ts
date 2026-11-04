@@ -10,6 +10,7 @@ import { Errors, isDuplicateKeyError } from '../../lib/errors.js';
 import { keysetFilter, keysetPage, keysetSort } from '../../lib/keyset.js';
 import { canReshare, canSeeProfile, canViewContent } from '../../policies/visibility.js';
 import type { FeedWriter } from '../feed/feed.writer.js';
+import type { MediaService } from '../media/media.service.js';
 import { getRelationship } from '../relationships/relationship.service.js';
 import { UserModel } from '../users/user.model.js';
 import { requireActiveUser } from '../users/user.queries.js';
@@ -39,7 +40,7 @@ async function incrementReposts(postId: Types.ObjectId | string, delta: 1 | -1) 
 
 export type PostService = ReturnType<typeof createPostService>;
 
-export function createPostService({ feed }: { feed: FeedWriter }) {
+export function createPostService({ feed, media }: { feed: FeedWriter; media: MediaService }) {
   async function hydrateOne(viewer: AuthUser, post: PostRecord): Promise<PostDto> {
     const [dto] = await hydratePosts(viewer.id, [post]);
     if (!dto) throw Errors.notFound('Post not found');
@@ -62,14 +63,26 @@ export function createPostService({ feed }: { feed: FeedWriter }) {
     async create(viewer: AuthUser, input: CreatePostInput): Promise<PostDto> {
       const quoted = input.quotedPostId ? await loadReshareable(viewer, input.quotedPostId) : null;
       const fanoutSkipped = await feed.shouldSkipFanout(viewer.id);
-      const created = await PostModel.create({
-        authorId: viewer.id,
-        ...(fanoutSkipped && { fanoutSkipped }),
-        kind: quoted ? 'quote' : 'original',
-        text: input.text,
-        hashtags: extractHashtags(input.text),
-        sharedPostId: quoted?._id ?? null,
-      });
+      const attached = input.mediaIds?.length
+        ? await media.claim(viewer, input.mediaIds, 'post')
+        : [];
+      const text = input.text ?? '';
+      let created;
+      try {
+        created = await PostModel.create({
+          authorId: viewer.id,
+          ...(fanoutSkipped && { fanoutSkipped }),
+          kind: quoted ? 'quote' : 'original',
+          text,
+          hashtags: extractHashtags(text),
+          media: attached,
+          sharedPostId: quoted?._id ?? null,
+        });
+      } catch (err) {
+        // Don't strand the files: let the user retry with the same uploads.
+        await media.unclaim(attached.map((item) => item.mediaId));
+        throw err;
+      }
       await Promise.all([
         incrementPostCount(viewer.id, 1),
         quoted ? incrementReposts(quoted._id, 1) : Promise.resolve(),
@@ -104,8 +117,10 @@ export function createPostService({ feed }: { feed: FeedWriter }) {
       const deleted = await PostModel.findOneAndUpdate(
         { _id: postId, authorId: viewer.id, deletedAt: null, kind: { $ne: 'repost' } },
         { $set: { deletedAt: new Date() } },
-        { projection: { kind: 1, sharedPostId: 1, authorId: 1, createdAt: 1 } },
-      ).lean<Pick<PostRecord, '_id' | 'kind' | 'sharedPostId' | 'authorId' | 'createdAt'>>();
+        { projection: { kind: 1, sharedPostId: 1, authorId: 1, createdAt: 1, media: 1 } },
+      ).lean<
+        Pick<PostRecord, '_id' | 'kind' | 'sharedPostId' | 'authorId' | 'createdAt' | 'media'>
+      >();
       if (!deleted) throw Errors.notFound('Post not found');
       await Promise.all([
         incrementPostCount(viewer.id, -1),
@@ -113,6 +128,8 @@ export function createPostService({ feed }: { feed: FeedWriter }) {
           ? incrementReposts(deleted.sharedPostId, -1)
           : Promise.resolve(),
         feed.onPostRemoved(deleted),
+        // The cleanup job deletes the files from the CDN.
+        media.release((deleted.media ?? []).map((item) => item.mediaId)),
       ]);
     },
 

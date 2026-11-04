@@ -20,7 +20,12 @@ import type { HealthCheck } from './modules/health/health.service.js';
 import type { IdentityProvider } from './modules/users/identity.js';
 import { createCommentService } from './modules/comments/comment.service.js';
 import type { FeedQueue } from './modules/feed/feed.queue.js';
+import type { MediaProvider } from './infra/imagekit.js';
 import { createFeedRouter } from './modules/feed/feed.routes.js';
+import { createMediaRouter } from './modules/media/media.routes.js';
+import { createMediaService } from './modules/media/media.service.js';
+import { createStoryRouters } from './modules/stories/story.routes.js';
+import { createStoryService } from './modules/stories/story.service.js';
 import { createFeedService } from './modules/feed/feed.service.js';
 import { createFeedWriter } from './modules/feed/feed.writer.js';
 import { createTimelineStore } from './modules/feed/timeline.store.js';
@@ -29,6 +34,8 @@ import { createContentRouters } from './modules/posts/content.routes.js';
 import { createPostService } from './modules/posts/post.service.js';
 import { createBlockService } from './modules/relationships/block.service.js';
 import { createRelationshipRouter } from './modules/relationships/relationship.routes.js';
+import { createSearchRouter } from './modules/search/search.routes.js';
+import { createSearchService } from './modules/search/search.service.js';
 import { createFollowService } from './modules/relationships/follow.service.js';
 import { createUserRouter } from './modules/users/user.routes.js';
 import { createUserService } from './modules/users/user.service.js';
@@ -52,6 +59,8 @@ export interface AppDependencies {
   identityProvider: IdentityProvider;
   /** Where fan-out jobs go. The API only produces; worker.ts consumes. */
   feedQueue: FeedQueue;
+  /** Null when ImageKit is not configured: media endpoints then answer 503. */
+  mediaProvider: MediaProvider | null;
 }
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,128}$/;
@@ -69,8 +78,10 @@ export function createApp({
   tokenVerifier,
   identityProvider,
   feedQueue,
+  mediaProvider,
 }: AppDependencies): Express {
-  const users = createUserService({ redis, logger, identity: identityProvider });
+  const media = createMediaService({ provider: mediaProvider, logger });
+  const users = createUserService({ redis, logger, identity: identityProvider, media });
   const auth = createAuthMiddleware(tokenVerifier, users);
   const limiter = createRedisRateLimiter(redis);
   const timeline = createTimelineStore(redis);
@@ -160,7 +171,7 @@ export function createApp({
   const api = express.Router();
   api.use(auth.requireAuth, rateLimit(limiter, RateLimits.authenticated));
   const { postRouter, commentRouter, userContentRouter } = createContentRouters({
-    posts: createPostService({ feed: feedWriter }),
+    posts: createPostService({ feed: feedWriter, media }),
     engagement: createEngagementService(),
     comments: createCommentService(),
     auth,
@@ -180,6 +191,15 @@ export function createApp({
   api.use('/posts', postRouter);
   api.use('/comments', commentRouter);
   api.use('/feed', createFeedRouter({ feed, auth }));
+  const { storyRouter, userStoriesRouter } = createStoryRouters({
+    stories: createStoryService({ media }),
+    auth,
+    limiter,
+  });
+  api.use('/stories', storyRouter);
+  api.use('/users', userStoriesRouter);
+  api.use('/media', createMediaRouter({ media, auth, limiter }));
+  api.use('/search', createSearchRouter({ search: createSearchService(), auth, limiter }));
   app.use('/api/v1', api);
 
   app.use(notFound);

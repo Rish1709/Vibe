@@ -12,9 +12,11 @@ import mongoose from 'mongoose';
 import { z } from 'zod';
 import '../src/modules/comments/comment.model.js';
 import '../src/modules/engagement/engagement.models.js';
+import '../src/modules/media/media.model.js';
 import '../src/modules/posts/post.model.js';
 import '../src/modules/relationships/block.model.js';
 import '../src/modules/relationships/follow.model.js';
+import '../src/modules/stories/story.model.js';
 import '../src/modules/users/user.model.js';
 
 const { MONGODB_URI } = z

@@ -47,6 +47,13 @@ Tests need the Redis container running (`npm run infra:up`); MongoDB tests use a
    `user.deleted`, and set `CLERK_WEBHOOK_SIGNING_SECRET`. Locally this needs a tunnel (e.g. ngrok).
    Sign-in works without webhooks: users are provisioned on their first request.
 
+### ImageKit setup (photos, videos, stories, avatars)
+
+In the ImageKit dashboard, **Developer options → API keys**: copy the public key and the private key into
+`IMAGEKIT_PUBLIC_KEY` and `IMAGEKIT_PRIVATE_KEY` in `apps/api/.env`. The private key stays on the server;
+browsers only receive short-lived signed upload credentials. Without these keys the app runs, but uploads
+and stories are disabled. Run the worker (`npm run dev:worker`) to clean up unused uploads hourly.
+
 ### Troubleshooting: Docker Desktop won't start on Windows
 
 If Docker Desktop fails with `remove ...\dockerInference: The file cannot be accessed by the system`,
@@ -55,14 +62,15 @@ delete stale unix-socket files; the script moves them aside and starts Docker.
 
 ## Scripts
 
-| Command                                | Purpose                                                                                                     |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `npm test`                             | Run all test suites (MongoDB tests use an in-memory replica set)                                            |
-| `npm run lint` / `npm run format`      | ESLint (type-aware) / Prettier                                                                              |
-| `npm run typecheck`                    | Strict TypeScript across all workspaces                                                                     |
-| `npm run build`                        | Build shared, API and web                                                                                   |
-| `npm run seed -w @vibe/api`            | Seed realistic users, follows, posts, likes and comments (`-- --connect <your-username>` to join the graph) |
-| `npm run db:sync-indexes -w @vibe/api` | Build missing indexes and drop stale ones (production runs with `autoIndex` off)                            |
+| Command                                   | Purpose                                                                                                     |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `npm test`                                | Run all test suites (MongoDB tests use an in-memory replica set)                                            |
+| `npm run lint` / `npm run format`         | ESLint (type-aware) / Prettier                                                                              |
+| `npm run typecheck`                       | Strict TypeScript across all workspaces                                                                     |
+| `npm run build`                           | Build shared, API and web                                                                                   |
+| `npm run seed -w @vibe/api`               | Seed realistic users, follows, posts, likes and comments (`-- --connect <your-username>` to join the graph) |
+| `npm run db:sync-indexes -w @vibe/api`    | Build missing indexes and drop stale ones (production runs with `autoIndex` off)                            |
+| `npm run db:backfill-search -w @vibe/api` | Fill user search keys for accounts created before search existed (idempotent)                               |
 
 ## Roadmap
 

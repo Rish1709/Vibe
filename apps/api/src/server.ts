@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { parseEnv } from './config/env.js';
 import { createClerkTokenVerifier } from './infra/clerk.js';
 import { createLogger } from './infra/logger.js';
+import { createMediaProviderFromEnv } from './infra/imagekit.js';
 import { createFeedQueue } from './modules/feed/feed.queue.js';
 import { createClerkIdentityProvider } from './modules/users/identity.js';
 import { connectMongo, disconnectMongo, pingMongo } from './infra/mongo.js';
@@ -25,6 +26,8 @@ async function main(): Promise<void> {
   const queueRedis = createRedisClient(env.REDIS_URL, { name: 'queue', logger });
   await queueRedis.connect();
   const feedQueue = createFeedQueue(queueRedis, env.QUEUE_PREFIX);
+  const mediaProvider = createMediaProviderFromEnv(env);
+  if (!mediaProvider) logger.warn('ImageKit is not configured: media uploads are disabled');
 
   if (!env.CLERK_WEBHOOK_SIGNING_SECRET) {
     logger.warn('CLERK_WEBHOOK_SIGNING_SECRET is not set: account deletions will not sync');
@@ -43,6 +46,7 @@ async function main(): Promise<void> {
     }),
     identityProvider: createClerkIdentityProvider(env.CLERK_SECRET_KEY),
     feedQueue,
+    mediaProvider,
     healthChecks: {
       mongo: pingMongo,
       redis: async () => {

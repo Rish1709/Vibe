@@ -2,6 +2,7 @@ import type { PostDto, UserSummaryDto } from '@vibe/shared';
 import { Types } from 'mongoose';
 import { canViewContent } from '../../policies/visibility.js';
 import { BookmarkModel, LikeModel } from '../engagement/engagement.models.js';
+import { toMediaDto } from '../media/media.service.js';
 import { getRelationships } from '../relationships/relationship.service.js';
 import { findAuthors } from '../users/user.queries.js';
 import { PostModel, type PostRecord } from './post.model.js';
@@ -69,6 +70,7 @@ export async function hydratePosts(viewerId: string, posts: PostRecord[]): Promi
       author,
       text: post.text,
       hashtags: post.hashtags,
+      media: (post.media ?? []).map((media) => toMediaDto(media)),
       sharedPost,
       sharedPostUnavailable,
       counts: {

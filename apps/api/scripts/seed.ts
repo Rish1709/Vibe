@@ -21,6 +21,7 @@ import { PostModel } from '../src/modules/posts/post.model.js';
 import { BlockModel } from '../src/modules/relationships/block.model.js';
 import { FollowModel } from '../src/modules/relationships/follow.model.js';
 import { UserModel } from '../src/modules/users/user.model.js';
+import { searchTokensFor } from '../src/modules/users/user.search.js';
 
 const env = z
   .object({
@@ -159,6 +160,7 @@ async function main() {
       email: null,
       username: uniqueUsername(existing),
       displayName: `${first} ${last}`,
+      searchTokens: searchTokensFor(`${first} ${last}`),
       bio: faker.number.float() < 0.8 ? faker.person.bio().slice(0, 160) : '',
       website: faker.number.float() < 0.3 ? faker.internet.url() : null,
       avatarUrl: `https://i.pravatar.cc/240?u=${i}`,

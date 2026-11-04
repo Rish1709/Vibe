@@ -87,6 +87,33 @@ guards), and read-time visibility in hydration.
 
 Mutation-checked: job id format, rebuild placeholder, rebuild version check, celebrity flag, rebuild lock.
 
-## Phases 6–10
+## Phase 6: Stories and media
+
+- [x] Direct-to-ImageKit uploads with server-signed credentials (HMAC-SHA1, no SDK)
+- [x] Post-upload verification against ImageKit's record: name, folder, MIME, kind, size
+- [x] Media lifecycle (pending → ready → attached → released) with atomic single-use claiming
+- [x] Photo and video posts (up to 4 photos or 1 video, text optional), avatars
+- [x] Stories: 24h expiry enforced in queries (TTL is cleanup only), tray, unseen rings, deduped views,
+      author-only viewer list, delete
+- [x] Hourly media cleanup job (BullMQ job scheduler in the worker)
+- [x] Frontend: composer media picker with progress, responsive ImageKit delivery, story tray and
+      full-screen viewer (Zustand), avatar picker
+- [x] Live upload through real ImageKit: photo post and story verified end to end
+- [x] Fixed from live testing: pre-Phase-6 posts (no `media` field) crashed the feed; a slow ImageKit
+      lookup surfaced as a 500 (now retried once, then a 503 the browser retries)
+- [x] `db:sync-indexes` now includes the media and story models
+
+Tests: shared 27, API 162, web 33. Mutation-checked: story expiry, view dedup, upload folder check,
+atomic claim.
+
+## User search (pulled forward from Phase 8)
+
+- [x] `GET /search/users`: username prefix + display-name word prefix, accent-insensitive, both index scans
+- [x] `searchTokens` written with every display-name change; idempotent backfill (`db:backfill-search`)
+- [x] Private accounts findable and flagged; blocked accounts (either way) excluded; regex-escaped
+- [x] Search page: debounced, query in the URL, follow / request / cancel from results
+- [ ] Live check in the browser
+
+## Phases 7–10
 
 See the roadmap in `README.md`.

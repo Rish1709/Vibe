@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { objectIdSchema } from './pagination.js';
 import type { ViewerRelationship } from './social.js';
 
 export const USERNAME_MIN = 3;
@@ -87,6 +88,8 @@ export const updateProfileSchema = z
     bio: bioSchema,
     // Empty string clears the field.
     website: z.union([websiteSchema, z.literal('')]),
+    /** An uploaded avatar (purpose 'avatar'), or null to remove the custom avatar. */
+    avatarMediaId: objectIdSchema.nullable(),
   })
   .partial()
   .strict()

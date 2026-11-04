@@ -31,13 +31,19 @@ export function createWorld(redis: Redis, overrides: Partial<AppDependencies> = 
     ...overrides,
   });
 
-  async function user(username: string, { isPrivate = false } = {}): Promise<TestUser> {
+  async function user(
+    username: string,
+    {
+      isPrivate = false,
+      displayName = username,
+    }: { isPrivate?: boolean; displayName?: string } = {},
+  ): Promise<TestUser> {
     const clerkId = identity.add(newClerkId(), { name: username });
     const headers = async () => ({ Authorization: `Bearer ${await signSessionToken(clerkId)}` });
     const res = await request(app)
       .post('/api/v1/users/me/onboarding')
       .set(await headers())
-      .send({ username, displayName: username });
+      .send({ username, displayName });
     expect(res.status).toBe(200);
     if (isPrivate) {
       const settings = await request(app)

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mediaIdsSchema, type MediaDto } from './media.js';
 import { objectIdSchema } from './pagination.js';
 
 export const POST_TEXT_MAX = 500;
@@ -44,11 +45,17 @@ const postTextSchema = z.string().trim().min(1, 'Write something').max(POST_TEXT
 
 export const createPostSchema = z
   .object({
-    text: postTextSchema,
+    text: postTextSchema.optional(),
+    /** Uploaded media (see /media/uploads), up to 4 images or 1 video. */
+    mediaIds: mediaIdsSchema.optional(),
     /** Quote another post. Plain reposts (no text) use PUT /posts/:id/repost. */
     quotedPostId: objectIdSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => value.text !== undefined || (value.mediaIds?.length ?? 0) > 0, {
+    message: 'Write something or add a photo or video',
+    path: ['text'],
+  });
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 
 export const updatePostSchema = z.object({ text: postTextSchema }).strict();
@@ -74,6 +81,7 @@ export interface PostDto {
   /** Empty for plain reposts. */
   text: string;
   hashtags: string[];
+  media: MediaDto[];
   /**
    * The reposted or quoted post (one level deep). Null with `sharedPostUnavailable` when it was
    * deleted or the viewer may not see it.
@@ -100,4 +108,19 @@ export interface CommentDto {
 export interface ToggleResultDto {
   active: boolean;
   count: number;
+}
+
+export const USER_SEARCH_QUERY_MAX = 50;
+export const USER_SEARCH_LIMIT_MAX = 25;
+
+/** `q` matches a username prefix ("@" optional) or the start of any word in the display name. */
+export const userSearchQuerySchema = z.object({
+  q: z.string().trim().min(1, 'Type something to search').max(USER_SEARCH_QUERY_MAX),
+  limit: z.coerce.number().int().min(1).max(USER_SEARCH_LIMIT_MAX).default(20),
+});
+export type UserSearchQuery = z.infer<typeof userSearchQuerySchema>;
+
+export interface UserSearchResultDto extends UserListItemDto {
+  /** Lets the client say up front that following sends a request. */
+  isPrivate: boolean;
 }

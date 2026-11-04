@@ -98,6 +98,7 @@ export function makePost(overrides: Partial<PostDto> = {}): PostDto {
     },
     text: 'hello world',
     hashtags: [],
+    media: [],
     sharedPost: null,
     sharedPostUnavailable: false,
     counts: { likes: 0, comments: 0, reposts: 0 },

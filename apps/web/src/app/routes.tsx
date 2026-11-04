@@ -6,6 +6,7 @@ import { FollowListPage } from '@/features/relationships/FollowListPage';
 import { HomePage } from '@/features/feed/HomePage';
 import { OnboardingPage } from '@/features/onboarding/OnboardingPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
+import { SearchPage } from '@/features/search/SearchPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { RequireAuth, RequireOnboarded } from './guards';
 import { AppLayout } from './layouts/AppLayout';
@@ -32,6 +33,7 @@ export const appRoutes: RouteObject[] = [
               { index: true, element: <HomePage /> },
               { path: 'settings', element: <SettingsPage /> },
               { path: 'bookmarks', element: <BookmarksPage /> },
+              { path: 'search', element: <SearchPage /> },
               { path: 'p/:postId', element: <PostDetailPage /> },
               { path: ':username', element: <ProfilePage /> },
               { path: ':username/followers', element: <FollowListPage kind="followers" /> },

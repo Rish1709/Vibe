@@ -22,4 +22,11 @@ export const RateLimits = {
   /** Likes, bookmarks, reposts: cheap toggles users tap quickly. */
   engagementWrites: { name: 'engagement-write', limit: 120, windowMs: MINUTE },
   commentWrites: { name: 'comment-write', limit: 30, windowMs: MINUTE },
+  /** Upload authorizations and completions. */
+  mediaUploads: { name: 'media-upload', limit: 30, windowMs: MINUTE },
+  storyWrites: { name: 'story-write', limit: 20, windowMs: MINUTE },
+  /** Viewing stories marks them seen; tapping through a tray is fast. */
+  storyViews: { name: 'story-view', limit: 300, windowMs: MINUTE },
+  /** Search-as-you-type sends a request per pause in typing (debounced on the client). */
+  search: { name: 'search', limit: 120, windowMs: MINUTE },
 } satisfies Record<string, RateLimitPolicy>;

@@ -45,6 +45,10 @@ const envSchema = z.object({
   CLERK_AUTHORIZED_PARTIES: commaSeparated.pipe(z.array(z.url())).optional(),
   // Without it the webhook endpoint answers 503; users are still provisioned lazily on first request.
   CLERK_WEBHOOK_SIGNING_SECRET: z.string().startsWith('whsec_').optional(),
+
+  // ImageKit (Dashboard -> Developer options). Optional: without them, media endpoints answer 503.
+  IMAGEKIT_PUBLIC_KEY: z.string().startsWith('public_').optional(),
+  IMAGEKIT_PRIVATE_KEY: z.string().startsWith('private_').optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

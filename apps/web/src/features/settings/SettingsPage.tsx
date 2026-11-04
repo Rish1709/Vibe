@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useMe } from '../account/api';
+import { AvatarPicker } from './AvatarPicker';
 import { BlockedAccounts, FollowRequests } from './ConnectionSettings';
 import { PrivacySettings } from './PrivacySettings';
 import { ProfileForm } from './ProfileForm';
@@ -41,6 +42,9 @@ export function SettingsPage() {
     <>
       <PageHeader title="Settings" />
       <Section title="Profile">
+        <div className="mb-6">
+          <AvatarPicker me={me.data} />
+        </div>
         <ProfileForm me={me.data} />
       </Section>
       <Section title="Privacy">

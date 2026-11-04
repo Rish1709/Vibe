@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { describe, expect, it } from 'vitest';
 import { CommentModel } from '../../src/modules/comments/comment.model.js';
 import { LikeModel } from '../../src/modules/engagement/engagement.models.js';
@@ -74,6 +75,26 @@ describe('posts', () => {
     } while (cursor);
 
     expect(seen).toEqual(['post 6', 'post 5', 'post 4', 'post 3', 'post 2', 'post 1', 'post 0']);
+  });
+
+  it('reads and deletes posts stored before media existed (no media field)', async () => {
+    const alice = await world.user('alice');
+    const created = await as(alice).post('/posts', { text: 'from before media' });
+    const id = (created.body.data as { id: string }).id;
+    // Documents written before a field existed lack it, and .lean() reads don't apply schema defaults.
+    await PostModel.collection.updateOne(
+      { _id: new Types.ObjectId(id) },
+      { $unset: { media: '' } },
+    );
+
+    const list = await as(alice).get(`/users/${alice.id}/posts`);
+    expect(list.status).toBe(200);
+    expect(list.body.data).toEqual([expect.objectContaining({ id, media: [] })]);
+    const feed = await as(alice).get('/feed');
+    expect(feed.status).toBe(200);
+    expect(feed.body.data).toEqual([expect.objectContaining({ id, media: [] })]);
+    expect((await as(alice).get(`/posts/${id}`)).status).toBe(200);
+    expect((await as(alice).delete(`/posts/${id}`)).status).toBe(204);
   });
 
   it('rejects a tampered cursor', async () => {

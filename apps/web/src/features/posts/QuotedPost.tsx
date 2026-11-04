@@ -2,6 +2,7 @@ import type { PostDto } from '@vibe/shared';
 import { Link } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { timeAgo } from '@/lib/time';
+import { PostMedia } from './PostMedia';
 import { PostText } from './PostText';
 
 /** The embedded card shown inside a quote post (and in the quote composer). */
@@ -18,9 +19,12 @@ export function QuotedPost({ post }: { post: PostDto }) {
           @{post.author.username} · {timeAgo(post.createdAt)}
         </span>
       </div>
-      <div className="mt-1 line-clamp-4">
-        <PostText text={post.text} />
-      </div>
+      {post.text && (
+        <div className="mt-1 line-clamp-4">
+          <PostText text={post.text} />
+        </div>
+      )}
+      <PostMedia media={post.media.slice(0, 1)} />
     </Link>
   );
 }

@@ -32,6 +32,7 @@ export function buildTestApp(overrides: Partial<AppDependencies> = {}) {
     tokenVerifier: { verify: neverUsed('tokenVerifier') },
     identityProvider: { getUser: neverUsed('identityProvider') },
     feedQueue: createRecordingFeedQueue(),
+    mediaProvider: null,
     ...overrides,
   });
 }

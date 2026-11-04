@@ -2,6 +2,7 @@ import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query
 import type { UserListItemDto } from '@vibe/shared';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
+import { LockIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -10,13 +11,24 @@ import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
 import { useFollowUser } from './api';
 import { FollowButton } from './FollowButton';
 
-export function UserRow({ user, action }: { user: UserListItemDto; action?: ReactNode }) {
+export function UserRow({
+  user,
+  action,
+}: {
+  user: UserListItemDto & { isPrivate?: boolean };
+  action?: ReactNode;
+}) {
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <Link to={`/${user.username}`} className="flex min-w-0 flex-1 items-center gap-3">
         <Avatar src={user.avatarUrl} name={user.displayName} />
         <span className="min-w-0">
-          <span className="block truncate font-semibold">{user.displayName}</span>
+          <span className="flex items-center gap-1 font-semibold">
+            <span className="truncate">{user.displayName}</span>
+            {user.isPrivate && (
+              <LockIcon className="size-3.5 shrink-0 text-muted" aria-label="Private account" />
+            )}
+          </span>
           <span className="block truncate text-sm text-muted">@{user.username}</span>
         </span>
       </Link>

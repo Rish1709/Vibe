@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Logo } from '@/components/ui/Logo';
 import { useMe } from '@/features/account/api';
+import { StoryViewer } from '@/features/stories/StoryViewer';
 import { navItems } from '../navigation';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -56,6 +57,8 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
+
+      <StoryViewer />
 
       <nav
         aria-label="Primary mobile"
