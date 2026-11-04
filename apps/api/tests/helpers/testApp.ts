@@ -8,6 +8,8 @@ export const testConfig: AppDependencies['config'] = {
   CORS_ORIGINS: ['http://localhost:5173'],
   TRUST_PROXY: 0,
   REQUEST_TIMEOUT_MS: 5_000,
+  // All test files share one client IP and one Redis; per-user limits stay at production values.
+  RATE_LIMIT_ANONYMOUS_PER_MINUTE: 1_000_000,
   CLERK_WEBHOOK_SIGNING_SECRET: undefined,
 };
 

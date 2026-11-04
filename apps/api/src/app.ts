@@ -18,6 +18,13 @@ import { requestTimeout } from './middleware/timeout.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
 import type { HealthCheck } from './modules/health/health.service.js';
 import type { IdentityProvider } from './modules/users/identity.js';
+import { createCommentService } from './modules/comments/comment.service.js';
+import { createEngagementService } from './modules/engagement/engagement.service.js';
+import { createContentRouters } from './modules/posts/content.routes.js';
+import { createPostService } from './modules/posts/post.service.js';
+import { createBlockService } from './modules/relationships/block.service.js';
+import { createRelationshipRouter } from './modules/relationships/relationship.routes.js';
+import { createFollowService } from './modules/relationships/follow.service.js';
 import { createUserRouter } from './modules/users/user.routes.js';
 import { createUserService } from './modules/users/user.service.js';
 import { createClerkWebhookRouter } from './modules/webhooks/clerk.webhook.js';
@@ -25,7 +32,11 @@ import { createClerkWebhookRouter } from './modules/webhooks/clerk.webhook.js';
 export interface AppDependencies {
   config: Pick<
     Env,
-    'CORS_ORIGINS' | 'TRUST_PROXY' | 'REQUEST_TIMEOUT_MS' | 'CLERK_WEBHOOK_SIGNING_SECRET'
+    | 'CORS_ORIGINS'
+    | 'TRUST_PROXY'
+    | 'REQUEST_TIMEOUT_MS'
+    | 'RATE_LIMIT_ANONYMOUS_PER_MINUTE'
+    | 'CLERK_WEBHOOK_SIGNING_SECRET'
   >;
   logger: Logger;
   healthChecks: Record<string, HealthCheck>;
@@ -116,8 +127,36 @@ export function createApp({
 
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   // Caps unauthenticated traffic (including bad tokens) before any token verification work.
-  app.use('/api/v1', rateLimit(limiter, RateLimits.anonymous));
-  app.use('/api/v1/users', createUserRouter({ users, auth, limiter }));
+  app.use(
+    '/api/v1',
+    rateLimit(limiter, { ...RateLimits.anonymous, limit: config.RATE_LIMIT_ANONYMOUS_PER_MINUTE }),
+  );
+
+  // Every route below requires a verified session. Authentication and the per-user limit run once
+  // here; feature routers only add their own stricter limits and the onboarding requirement.
+  const api = express.Router();
+  api.use(auth.requireAuth, rateLimit(limiter, RateLimits.authenticated));
+  const { postRouter, commentRouter, userContentRouter } = createContentRouters({
+    posts: createPostService(),
+    engagement: createEngagementService(),
+    comments: createCommentService(),
+    auth,
+    limiter,
+  });
+  api.use('/users', createUserRouter({ users, auth, limiter }));
+  api.use('/users', userContentRouter);
+  api.use(
+    '/users',
+    createRelationshipRouter({
+      follows: createFollowService(),
+      blocks: createBlockService(),
+      auth,
+      limiter,
+    }),
+  );
+  api.use('/posts', postRouter);
+  api.use('/comments', commentRouter);
+  app.use('/api/v1', api);
 
   app.use(notFound);
   app.use(errorHandler);

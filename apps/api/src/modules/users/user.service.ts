@@ -2,7 +2,7 @@ import {
   usernameSchema,
   type MeDto,
   type OnboardingInput,
-  type PublicProfileDto,
+  type ProfileDto,
   type UpdateProfileInput,
   type UpdateSettingsInput,
   type UsernameAvailabilityDto,
@@ -13,6 +13,8 @@ import { CacheKeys } from '../../cache/keys.js';
 import type { Logger } from '../../infra/logger.js';
 import type { Redis } from '../../infra/redis.js';
 import { Errors, isDuplicateKeyError } from '../../lib/errors.js';
+import { canSeeProfile, canViewContent } from '../../policies/visibility.js';
+import { getRelationship } from '../relationships/relationship.service.js';
 import type { IdentityProfile, IdentityProvider } from './identity.js';
 import { toMe, toPublicProfile } from './user.mapper.js';
 import { UserModel, type UserRecord } from './user.model.js';
@@ -151,10 +153,20 @@ export function createUserService({ redis, logger, identity }: UserServiceDeps) 
       return toMe(await requireActiveUser(user.id));
     },
 
-    async getProfileByUsername(username: string): Promise<PublicProfileDto> {
+    async getProfileByUsername(viewer: AuthUser, username: string): Promise<ProfileDto> {
       const user = await UserModel.findOne({ username, deletedAt: null }).lean<UserRecord>();
       if (!user?.username) throw Errors.notFound('User not found');
-      return toPublicProfile({ ...user, username: user.username });
+      const id = user._id.toHexString();
+      const rel = await getRelationship(viewer.id, id);
+      // Someone who blocked the viewer is indistinguishable from a nonexistent account.
+      if (!canSeeProfile(rel)) throw Errors.notFound('User not found');
+      return {
+        ...toPublicProfile({ ...user, username: user.username }),
+        viewer: rel.isSelf
+          ? null
+          : { following: rel.following, followedBy: rel.followedBy, blocking: rel.blockedByViewer },
+        canViewContent: canViewContent(rel, user),
+      };
     },
 
     /**

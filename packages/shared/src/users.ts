@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ViewerRelationship } from './social.js';
 
 export const USERNAME_MIN = 3;
 export const USERNAME_MAX = 30;
@@ -118,6 +119,13 @@ export interface PublicProfileDto {
   isPrivate: boolean;
   counts: { followers: number; following: number; posts: number };
   createdAt: string;
+}
+
+/** A profile as seen by a specific viewer. `viewer` is null on the viewer's own profile. */
+export interface ProfileDto extends PublicProfileDto {
+  viewer: ViewerRelationship | null;
+  /** False for private accounts the viewer doesn't follow, and for blocked accounts. */
+  canViewContent: boolean;
 }
 
 /** The signed-in user's own account. Includes private fields. */

@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clerkState } from '@/test/clerkMock';
-import { makeMe, mockApi, renderAt } from '@/test/utils';
+import { makeMe, makePost, makeProfile, mockApi, renderAt } from '@/test/utils';
 
 vi.mock('@clerk/react', async () => (await import('@/test/clerkMock')).clerkModule);
 
@@ -71,16 +71,40 @@ describe('profile page', () => {
     expect(await screen.findByText("This account doesn't exist")).toBeInTheDocument();
   });
 
-  it('offers editing only on the user’s own profile', async () => {
+  it('offers editing on the user’s own profile and lists their posts', async () => {
     const me = makeMe();
     mockApi({
       'GET /api/v1/users/me': () => ({ json: { data: me } }),
-      'GET /api/v1/users/ada': () => ({ json: { data: { ...me, username: 'ada' } } }),
+      'GET /api/v1/users/ada': () => ({ json: { data: makeProfile({ viewer: null }) } }),
+      [`GET /api/v1/users/${me.id}/posts`]: () => ({
+        json: { data: [makePost({ text: 'my first post' })], meta: { nextCursor: null } },
+      }),
     });
     renderAt('/ada');
     expect(await screen.findByRole('link', { name: 'Edit profile' })).toHaveAttribute(
       'href',
       '/settings',
     );
+    expect(await screen.findByText('my first post')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Follow' })).not.toBeInTheDocument();
+  });
+
+  it('hides a private account’s posts from non-followers without requesting them', async () => {
+    const calls = mockApi({
+      'GET /api/v1/users/me': () => ({ json: { data: makeMe() } }),
+      'GET /api/v1/users/grace': () => ({
+        json: {
+          data: makeProfile({
+            id: 'b'.repeat(24),
+            username: 'grace',
+            isPrivate: true,
+            canViewContent: false,
+          }),
+        },
+      }),
+    });
+    renderAt('/grace');
+    expect(await screen.findByText('This account is private')).toBeInTheDocument();
+    expect(calls.some((call) => call.path.includes('/posts'))).toBe(false);
   });
 });

@@ -4,14 +4,15 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ApiError } from '@/lib/apiClient';
-import { useMe } from '../account/api';
+import { useUserPosts } from '../posts/api';
+import { PostList } from '../posts/PostList';
 import { useProfile } from './api';
 import { ProfileHeader, ProfileHeaderSkeleton } from './ProfileHeader';
 
 export function ProfilePage() {
   const { username = '' } = useParams();
   const profile = useProfile(username);
-  const me = useMe();
+  const posts = useUserPosts(profile.data?.id ?? '', profile.data?.canViewContent === true);
 
   if (profile.isPending) {
     return (
@@ -36,25 +37,37 @@ export function ProfilePage() {
     );
   }
 
-  const isOwn = me.data?.id === profile.data.id;
+  const { data } = profile;
+  const isOwn = data.viewer === null;
   return (
     <>
-      <PageHeader
-        title={profile.data.displayName}
-        subtitle={`${profile.data.counts.posts} posts`}
-      />
-      <ProfileHeader profile={profile.data} isOwn={isOwn} />
-      {profile.data.isPrivate && !isOwn ? (
+      <PageHeader title={data.displayName} subtitle={`${data.counts.posts} posts`} />
+      <ProfileHeader profile={data} />
+      {data.viewer?.blocking ? (
+        <EmptyState
+          title={`You blocked @${data.username}`}
+          description="Unblock them to see their posts."
+        />
+      ) : !data.canViewContent ? (
         <EmptyState
           icon={<LockIcon />}
           title="This account is private"
-          description="Follow this account to see their posts."
+          description={
+            data.viewer?.following === 'pending'
+              ? 'Your follow request is waiting for approval.'
+              : 'Follow this account to see their posts.'
+          }
         />
       ) : (
-        <EmptyState
-          icon={<SparkIcon />}
-          title="No posts yet"
-          description={isOwn ? 'When you share something, it will show up here.' : undefined}
+        <PostList
+          query={posts}
+          empty={
+            <EmptyState
+              icon={<SparkIcon />}
+              title="No posts yet"
+              description={isOwn ? 'When you share something, it will show up here.' : undefined}
+            />
+          }
         />
       )}
     </>

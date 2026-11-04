@@ -36,8 +36,8 @@ export function createUserController(users: UserService) {
       },
     ),
 
-    getProfile: validated({ params: usernameParamsSchema }, async ({ params }, _req, res) => {
-      sendData(res, await users.getProfileByUsername(params.username));
+    getProfile: validated({ params: usernameParamsSchema }, async ({ params }, req, res) => {
+      sendData(res, await users.getProfileByUsername(currentUser(req), params.username));
     }),
   };
 }

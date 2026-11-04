@@ -1,34 +1,83 @@
-import type { PublicProfileDto } from '@vibe/shared';
+import type { ProfileDto } from '@vibe/shared';
 import { Link } from 'react-router';
-import { CalendarIcon, LinkIcon, LockIcon } from '@/components/icons';
+import { CalendarIcon, LinkIcon, LockIcon, MoreIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
+import { Button } from '@/components/ui/Button';
+import { Menu } from '@/components/ui/Menu';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useBlock, useFollow } from '../relationships/api';
+import { FollowButton } from '../relationships/FollowButton';
 
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact' });
 const joined = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
 
-function Stat({ value, label }: { value: number; label: string }) {
-  return (
-    <span>
+function Stat({ value, label, to }: { value: number; label: string; to?: string | undefined }) {
+  const content = (
+    <>
       <strong className="font-semibold">{compact.format(value)}</strong>{' '}
       <span className="text-muted">{label}</span>
-    </span>
+    </>
+  );
+  return to ? (
+    <Link to={to} className="hover:underline">
+      {content}
+    </Link>
+  ) : (
+    <span>{content}</span>
   );
 }
 
-export function ProfileHeader({ profile, isOwn }: { profile: PublicProfileDto; isOwn: boolean }) {
+function ProfileActions({ profile }: { profile: ProfileDto }) {
+  const follow = useFollow(profile);
+  const block = useBlock(profile);
+  if (!profile.viewer) {
+    return (
+      <Link
+        to="/settings"
+        className="rounded-full border border-border px-4 py-1.5 text-sm font-semibold hover:bg-surface-hover"
+      >
+        Edit profile
+      </Link>
+    );
+  }
+  const { blocking, following } = profile.viewer;
+  return (
+    <div className="flex items-center gap-1">
+      <Menu
+        label="More profile actions"
+        trigger={<MoreIcon className="size-5" />}
+        items={[
+          blocking
+            ? { label: `Unblock @${profile.username}`, onSelect: () => block.mutate(false) }
+            : {
+                label: `Block @${profile.username}`,
+                danger: true,
+                onSelect: () => block.mutate(true),
+              },
+        ]}
+      />
+      {blocking ? (
+        <Button variant="danger" loading={block.isPending} onClick={() => block.mutate(false)}>
+          Unblock
+        </Button>
+      ) : (
+        <FollowButton
+          state={following}
+          pending={follow.isPending}
+          onChange={(next) => follow.mutate(next)}
+        />
+      )}
+    </div>
+  );
+}
+
+export function ProfileHeader({ profile }: { profile: ProfileDto }) {
+  const listsVisible = profile.canViewContent;
   return (
     <section className="border-b border-border px-4 pt-6 pb-5">
       <div className="flex items-start justify-between gap-4">
         <Avatar src={profile.avatarUrl} name={profile.displayName} size="lg" />
-        {isOwn && (
-          <Link
-            to="/settings"
-            className="rounded-full border border-border px-4 py-1.5 text-sm font-semibold hover:bg-surface-hover"
-          >
-            Edit profile
-          </Link>
-        )}
+        <ProfileActions profile={profile} />
       </div>
 
       <div className="mt-4">
@@ -38,7 +87,12 @@ export function ProfileHeader({ profile, isOwn }: { profile: PublicProfileDto; i
             <LockIcon className="size-4 text-muted" aria-label="Private account" />
           )}
         </h2>
-        <p className="text-muted">@{profile.username}</p>
+        <p className="flex items-center gap-2 text-muted">
+          @{profile.username}
+          {profile.viewer?.followedBy && (
+            <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs">Follows you</span>
+          )}
+        </p>
       </div>
 
       {profile.bio && <p className="mt-3 whitespace-pre-line">{profile.bio}</p>}
@@ -63,8 +117,16 @@ export function ProfileHeader({ profile, isOwn }: { profile: PublicProfileDto; i
 
       <div className="mt-3 flex gap-5 text-sm">
         <Stat value={profile.counts.posts} label="posts" />
-        <Stat value={profile.counts.followers} label="followers" />
-        <Stat value={profile.counts.following} label="following" />
+        <Stat
+          value={profile.counts.followers}
+          label="followers"
+          to={listsVisible ? `/${profile.username}/followers` : undefined}
+        />
+        <Stat
+          value={profile.counts.following}
+          label="following"
+          to={listsVisible ? `/${profile.username}/following` : undefined}
+        />
       </div>
     </section>
   );

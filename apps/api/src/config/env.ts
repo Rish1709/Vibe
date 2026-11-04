@@ -21,6 +21,8 @@ const envSchema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
 
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  // Per-IP budget before authentication. Raise it behind large NATs or in shared test environments.
+  RATE_LIMIT_ANONYMOUS_PER_MINUTE: z.coerce.number().int().positive().default(600),
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
 
   CLERK_SECRET_KEY: z.string().regex(/^sk_(test|live)_/, 'must be a Clerk secret key (sk_...)'),

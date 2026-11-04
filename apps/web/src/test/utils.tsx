@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import type { MeDto } from '@vibe/shared';
+import type { MeDto, PostDto, ProfileDto } from '@vibe/shared';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { vi } from 'vitest';
 import { AppProviders } from '@/app/providers';
@@ -63,6 +63,47 @@ export function makeMe(overrides: Partial<MeDto> = {}): MeDto {
     email: 'ada@example.com',
     onboarded: true,
     settings: { messagePolicy: 'everyone' },
+    ...overrides,
+  };
+}
+
+export function makeProfile(overrides: Partial<ProfileDto> = {}): ProfileDto {
+  return {
+    id: '65a1b2c3d4e5f60718293a4b',
+    username: 'ada',
+    displayName: 'Ada Lovelace',
+    bio: '',
+    website: null,
+    avatarUrl: null,
+    isPrivate: false,
+    counts: { followers: 3, following: 5, posts: 1 },
+    createdAt: '2026-01-15T10:00:00.000Z',
+    viewer: { following: 'none', followedBy: false, blocking: false },
+    canViewContent: true,
+    ...overrides,
+  };
+}
+
+let postSeq = 0;
+export function makePost(overrides: Partial<PostDto> = {}): PostDto {
+  postSeq += 1;
+  return {
+    id: postSeq.toString(16).padStart(24, '0'),
+    kind: 'original',
+    author: {
+      id: '65a1b2c3d4e5f60718293a4b',
+      username: 'ada',
+      displayName: 'Ada Lovelace',
+      avatarUrl: null,
+    },
+    text: 'hello world',
+    hashtags: [],
+    sharedPost: null,
+    sharedPostUnavailable: false,
+    counts: { likes: 0, comments: 0, reposts: 0 },
+    viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: true },
+    createdAt: new Date().toISOString(),
+    editedAt: null,
     ...overrides,
   };
 }

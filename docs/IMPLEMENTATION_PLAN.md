@@ -45,6 +45,31 @@ Tests: shared 11, API 32, web 7. All passing.
 Tests: shared 27, API 81, web 18. All passing. Webhook-ordering and one-shot-onboarding tests
 were mutation-checked (each fails when its guard is removed).
 
-## Phases 4–10
+## Phase 4: Social graph and content
+
+- [x] Follows with private-account requests (accept, decline, remove follower), idempotent toggles
+- [x] Blocks: transaction plus post-commit sweep; blocked users vanish (404) for the blocked side
+- [x] Single visibility policy (`policies/visibility.ts`) used by every read and write
+- [x] Batch relationship lookup (3 queries for any number of accounts) and post hydration (~8 queries
+      per page, independent of page size)
+- [x] Posts: create, edit, soft delete, hashtags, quotes, one-per-user reposts (partial unique index)
+- [x] Likes and bookmarks: upsert-then-count, race-safe without transactions
+- [x] Comments: two-level threads, newest-first top level, oldest-first replies, author/owner delete
+- [x] Keyset pagination helper on (createdAt, \_id) for every list
+- [x] Seed script (deterministic, re-runnable, counters derived from edges, `--connect <username>`)
+- [x] `db:sync-indexes` script; username index changed from partial to sparse after `explain()`
+      showed every profile lookup was a COLLSCAN
+- [x] Frontend: composer, post card (optimistic like/bookmark/repost with rollback), quotes,
+      post detail with comments, follow button, followers/following lists, bookmarks, follow
+      requests and blocked accounts in settings, infinite scroll
+- [ ] Cascade cleanup of a deleted post's likes/comments/bookmarks (Phase 7 background job;
+      hydration already hides them)
+- [ ] Counter reconciliation job (Phase 7)
+- [~] Live click-through with a real account (pending)
+
+Tests: shared 27, API 113, web 27. Mutation-checked: like counting, follow/block race (both
+guards), and read-time visibility in hydration.
+
+## Phases 5–10
 
 See the roadmap in `README.md`.

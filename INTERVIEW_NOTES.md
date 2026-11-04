@@ -135,3 +135,97 @@ Clerk handles credentials and sessions; the API client asks Clerk for a fresh to
 caches it). Route guards are UX only; the server enforces everything. On sign-out the query cache is
 cleared so the next account on a shared device never sees the previous account's data. The privacy
 toggle is optimistic with rollback; profile edits send only dirty fields.
+
+## Social graph and content (Phase 4)
+
+### Data model: edges, not arrays
+
+Follows, likes, bookmarks and comments are separate collections with one document per edge, never
+arrays on the user or post. Arrays would be unbounded (a celebrity's followers exceed the 16 MB document
+limit), every write would rewrite one hot document, and paging an embedded array can't use an index.
+Counts are denormalized onto the parent (`users.counts`, `posts.counts`) so rendering is O(1).
+
+### Counters without transactions
+
+A like is an upsert on the unique `{postId, userId}` index followed by `$inc` **only if this call
+inserted** (`upsertedCount === 1`); unlike decrements only if `deletedCount === 1`. The rule is
+_edge ownership_: whoever creates an edge adds one, whoever actually removes it subtracts one.
+Tested: 20 concurrent likes from one user produce 1 like and a count of 1; 12 users liking while 5 of them
+double-unlike leaves exactly 7.
+
+**Q: Why not a transaction?** A popular post's counter document would be written by every liker; under
+snapshot isolation concurrent transactions touching it hit WriteConflict and retry, so throughput
+collapses exactly where traffic is highest. Plain `$inc` is atomic and contention-friendly. The cost is
+a tiny drift window if the process dies between the two writes, repaired by a reconciliation job.
+
+### Visibility as one pure policy
+
+`canSeeProfile`, `canViewContent`, `canInteract`, `canReshare`, `canFollow` take an already-loaded
+relationship and author. Every module calls them; none re-implements the rules. Invisible posts return
+**404, not 403**, so a private or blocking account's content can't be probed for existence.
+
+### No N+1: batch hydration
+
+Turning a page of posts into DTOs costs about 8 queries **regardless of page size**: shared posts, authors,
+relationships (blocks both ways, my follows, their follows), and the viewer's likes, bookmarks and reposts,
+each one `$in` over the page. Hydration also re-checks visibility, because lists like bookmarks (and the
+Phase 5 feed's cached id lists) can contain posts whose author has since gone private, blocked the viewer
+or been deleted. A mutation test proved this mattered: removing the check made the bookmarks test fail.
+
+### Bug found: snapshot isolation broke the follow/block race argument
+
+Concurrent "B follows A" and "A blocks B" could leave B following A. The original design was
+_insert, then check_: follow inserts its edge then looks for a block; block inserts the block then deletes
+edges; in every interleaving one side should see the other. That argument assumes each operation sees the
+latest committed data immediately. **The block runs in a transaction**: its block row is invisible until
+commit, and its edge delete reads the transaction's snapshot, which predates an edge inserted
+mid-transaction. Both sides missed each other.
+
+Fix: after commit, block runs a non-transactional sweep of edges between the pair. A follow either checks
+after the commit (sees the block, removes its own edge) or inserted before the commit (the sweep, reading
+the latest data, removes it). Counter decrements still follow edge ownership. A stress test of 30
+independent races per run caught it; removing the sweep makes it fail 3/3, with it 120/120 pass.
+
+**Interview takeaway:** transactions give atomicity and a consistent snapshot, not linearizability against
+writers outside the transaction. Reasoning about races that mix transactional and non-transactional
+writes has to account for when each side's writes become visible.
+
+### Bug found with explain(): a partial index that was never used
+
+`username` had a _partial_ unique index (`{ $type: 'string' }`) because users have no username until
+onboarding. Seeded data plus `explain()` showed every profile lookup was a **COLLSCAN**: the planner uses a
+partial index only when it can prove the query matches the filter, and it doesn't infer that
+`username = 'x'` implies a string. Switched to a **sparse** unique index: same exclusion of missing
+fields, usable for equality. Lookup went from scanning every user to 1 key / 1 document. Index changes ship
+via `npm run db:sync-indexes` because production runs with `autoIndex` off.
+
+The other partial index (one plain repost per user per post, `{ kind: 'repost' }`) is fine: every query
+against it includes `kind: 'repost'`.
+
+### Index design (all verified with explain on seeded data)
+
+| Query                  | Index                                                | Plan                    |
+| ---------------------- | ---------------------------------------------------- | ----------------------- |
+| Profile timeline       | `posts {authorId, createdAt -1, _id -1}`             | IXSCAN, keys = returned |
+| Followers list         | `follows {followeeId, status, createdAt -1, _id -1}` | IXSCAN, keys = returned |
+| Top-level comments     | `comments {postId, parentId, createdAt -1, _id -1}`  | IXSCAN, keys = returned |
+| Hashtag page           | `posts {hashtags, createdAt -1, _id -1}` (multikey)  | IXSCAN, keys = returned |
+| "Did I like these 20?" | `likes {postId, userId}` (the unique index)          | IXSCAN, point lookups   |
+
+Equality fields first, then the sort keys (ESR rule), so a page is an index range scan of `limit + 1`
+entries with no in-memory sort. A separate `{userId, postId}` like index was removed: the unique index
+already answers the batch lookup, and every extra index adds write cost to each like.
+
+### Two-level comment threads
+
+Replies attach to the top-level comment, so a thread page is one range scan (`parentId` index), not a
+recursive `$graphLookup`. Blocked users' comments are filtered after the query (the block list is
+unbounded, so `$nin` over it isn't viable); pages can come back short, but `nextCursor` comes from the
+unfiltered rows, so pagination stays correct.
+
+### Seed data you can trust
+
+The seed derives every counter from the edges it creates, recomputes counters for real accounts it
+touches (an earlier version incremented them and drifted on re-runs, caught by a consistency check), and
+is deterministic (all randomness goes through a seeded faker; `Math.random` defeated that in the first
+version).

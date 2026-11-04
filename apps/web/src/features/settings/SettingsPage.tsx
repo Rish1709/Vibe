@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useMe } from '../account/api';
+import { BlockedAccounts, FollowRequests } from './ConnectionSettings';
 import { PrivacySettings } from './PrivacySettings';
 import { ProfileForm } from './ProfileForm';
 
@@ -44,6 +45,12 @@ export function SettingsPage() {
       </Section>
       <Section title="Privacy">
         <PrivacySettings me={me.data} />
+      </Section>
+      <Section title="Follow requests">
+        <FollowRequests />
+      </Section>
+      <Section title="Blocked accounts">
+        <BlockedAccounts />
       </Section>
       <Section title="Account">
         <div className="flex flex-wrap items-center justify-between gap-4">

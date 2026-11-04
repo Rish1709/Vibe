@@ -49,10 +49,11 @@ const userSchema = new Schema(
 
 userSchema.index({ clerkId: 1 }, { unique: true });
 // Authoritative username uniqueness. An application-level "is it taken?" check alone would race.
-userSchema.index(
-  { username: 1 },
-  { unique: true, partialFilterExpression: { username: { $type: 'string' } } },
-);
+// Sparse, not partial: users have no username until onboarding, so those documents must be left out.
+// A partial index ({ $type: 'string' }) enforced that too, but the planner only uses a partial index
+// when it can prove the query matches the filter, and it does not infer that `username = 'x'`
+// implies a string. Every profile lookup became a COLLSCAN (found with explain() on seeded data).
+userSchema.index({ username: 1 }, { unique: true, sparse: true });
 
 export type UserRecord = InferSchemaType<typeof userSchema> & { _id: Types.ObjectId };
 

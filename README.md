@@ -55,19 +55,21 @@ delete stale unix-socket files; the script moves them aside and starts Docker.
 
 ## Scripts
 
-| Command                           | Purpose                                                          |
-| --------------------------------- | ---------------------------------------------------------------- |
-| `npm test`                        | Run all test suites (MongoDB tests use an in-memory replica set) |
-| `npm run lint` / `npm run format` | ESLint (type-aware) / Prettier                                   |
-| `npm run typecheck`               | Strict TypeScript across all workspaces                          |
-| `npm run build`                   | Build shared, API and web                                        |
+| Command                                | Purpose                                                                                                     |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `npm test`                             | Run all test suites (MongoDB tests use an in-memory replica set)                                            |
+| `npm run lint` / `npm run format`      | ESLint (type-aware) / Prettier                                                                              |
+| `npm run typecheck`                    | Strict TypeScript across all workspaces                                                                     |
+| `npm run build`                        | Build shared, API and web                                                                                   |
+| `npm run seed -w @vibe/api`            | Seed realistic users, follows, posts, likes and comments (`-- --connect <your-username>` to join the graph) |
+| `npm run db:sync-indexes -w @vibe/api` | Build missing indexes and drop stale ones (production runs with `autoIndex` off)                            |
 
 ## Roadmap
 
 1. Planning ✅
 2. Foundation ✅
-3. Authentication and user management
-4. Posts, comments, likes, follows
+3. Authentication and user management ✅
+4. Posts, comments, likes, follows ✅
 5. Feed architecture, indexing, Redis caching
 6. Stories and media
 7. Real-time messaging and notifications

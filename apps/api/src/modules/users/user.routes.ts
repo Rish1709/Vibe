@@ -17,8 +17,7 @@ export function createUserRouter({ users, auth, limiter }: UserRouterDeps): Rout
   const accountWrites = rateLimit(limiter, RateLimits.accountWrites);
   const router = Router();
 
-  router.use(auth.requireAuth, rateLimit(limiter, RateLimits.authenticated));
-
+  // Authentication and the per-user limit are applied once, by the parent /api/v1 router.
   // Available before onboarding: the client needs these to finish setting up the account.
   router.get('/me', controller.getMe);
   router.post('/me/onboarding', accountWrites, controller.completeOnboarding);
