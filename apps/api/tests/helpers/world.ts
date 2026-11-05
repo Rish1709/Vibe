@@ -88,5 +88,5 @@ export function createWorld(redis: Redis, overrides: Partial<AppDependencies> = 
     };
   }
 
-  return { app, user, as, post, profile };
+  return { app, identity, user, as, post, profile };
 }

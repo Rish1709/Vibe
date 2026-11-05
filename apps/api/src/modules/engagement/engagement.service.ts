@@ -8,6 +8,7 @@ import { PostModel, type PostRecord } from '../posts/post.model.js';
 import { getRelationships } from '../relationships/relationship.service.js';
 import { findUserSummaries } from '../users/user.queries.js';
 import type { AuthUser } from '../users/user.service.js';
+import type { NotificationHooks } from '../notifications/notification.hooks.js';
 import {
   BookmarkModel,
   LikeModel,
@@ -49,9 +50,16 @@ async function loadEngageablePost(viewer: AuthUser, postId: string): Promise<Pos
   return post;
 }
 
+const likeEvent = (actorId: string, post: Pick<PostRecord, '_id' | 'authorId'>) => ({
+  type: 'like' as const,
+  actorId,
+  recipientId: post.authorId.toHexString(),
+  postId: post._id.toHexString(),
+});
+
 export type EngagementService = ReturnType<typeof createEngagementService>;
 
-export function createEngagementService() {
+export function createEngagementService({ notifier, notifications }: NotificationHooks) {
   return {
     /**
      * Idempotent and race-safe without a transaction. The upsert either inserts the edge or matches the
@@ -68,6 +76,7 @@ export function createEngagementService() {
         ),
       );
       const count = inserted ? await adjustLikes(post._id, 1) : Math.max(0, post.counts.likes);
+      if (inserted) notifier.notify(likeEvent(viewer.id, post));
       return { active: true, count };
     },
 
@@ -79,6 +88,8 @@ export function createEngagementService() {
         removed.deletedCount === 1
           ? await adjustLikes(post._id, -1)
           : Math.max(0, post.counts.likes);
+      // After the edge is gone (see the processor's "insert, then check").
+      if (removed.deletedCount === 1) await notifications.retract(likeEvent(viewer.id, post));
       return { active: false, count };
     },
 

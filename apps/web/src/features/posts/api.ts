@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreatePostInput, PostDto, ToggleResultDto } from '@vibe/shared';
 import { toast } from 'sonner';
-import { apiRequest } from '@/lib/apiClient';
+import { ApiError, apiRequest } from '@/lib/apiClient';
 import { fetchPage, pageOptions } from '@/lib/pagination';
 import { queryKeys } from '@/lib/queryKeys';
 import { removePostEverywhere, restorePosts, snapshotPosts, updatePostEverywhere } from './cache';
@@ -122,9 +122,14 @@ export function useTogglePost(kind: ToggleKind) {
       }));
       return { snapshot };
     },
-    onError: (_err, _vars, context) => {
+    onError: (err, _vars, context) => {
       if (context) restorePosts(queryClient, context.snapshot);
-      toast.error("Couldn't update. Please try again.");
+      // A refusal (4xx) won't succeed on retry: say why. Anything else is worth retrying.
+      toast.error(
+        err instanceof ApiError && err.isClientError
+          ? err.message
+          : "Couldn't update. Please try again.",
+      );
     },
     onSuccess: (result, { id }) => {
       if (count) {

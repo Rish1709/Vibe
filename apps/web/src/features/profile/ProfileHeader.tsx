@@ -1,10 +1,12 @@
 import type { ProfileDto } from '@vibe/shared';
-import { Link } from 'react-router';
-import { CalendarIcon, LinkIcon, LockIcon, MoreIcon } from '@/components/icons';
+import { Link, useNavigate } from 'react-router';
+import { toast } from 'sonner';
+import { CalendarIcon, LinkIcon, LockIcon, MessageIcon, MoreIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Menu } from '@/components/ui/Menu';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useOpenConversation } from '../messages/api';
 import { useBlock, useFollow } from '../relationships/api';
 import { FollowButton } from '../relationships/FollowButton';
 
@@ -24,6 +26,27 @@ function Stat({ value, label, to }: { value: number; label: string; to?: string 
     </Link>
   ) : (
     <span>{content}</span>
+  );
+}
+
+function MessageButton({ userId }: { userId: string }) {
+  const open = useOpenConversation();
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      aria-label="Message"
+      disabled={open.isPending}
+      onClick={() =>
+        open.mutate(userId, {
+          onSuccess: (conversation) => void navigate(`/messages/${conversation.id}`),
+          onError: () => toast.error('Could not open the conversation'),
+        })
+      }
+      className="rounded-full border border-border p-2 hover:bg-surface-hover disabled:opacity-50"
+    >
+      <MessageIcon className="size-5" />
+    </button>
   );
 }
 
@@ -56,6 +79,7 @@ function ProfileActions({ profile }: { profile: ProfileDto }) {
               },
         ]}
       />
+      {profile.canMessage && <MessageButton userId={profile.id} />}
       {blocking ? (
         <Button variant="danger" loading={block.isPending} onClick={() => block.mutate(false)}>
           Unblock

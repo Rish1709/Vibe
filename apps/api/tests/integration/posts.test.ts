@@ -249,6 +249,12 @@ describe('likes, bookmarks and reposts', () => {
     await as(priv).post(`/users/me/follow-requests/${request.id}/accept`);
     const postId = await world.post(priv, 'followers only');
 
+    // The post says so up front, so the app never offers an action that will be refused.
+    expect((await as(alice).get(`/posts/${postId}`)).body.data.viewer.canReshare).toBe(false);
+    expect((await as(priv).get(`/posts/${postId}`)).body.data.viewer.canReshare).toBe(false);
+    const publicPost = await world.post(alice, 'for everyone');
+    expect((await as(priv).get(`/posts/${publicPost}`)).body.data.viewer.canReshare).toBe(true);
+
     expect((await as(alice).put(`/posts/${postId}/repost`)).status).toBe(403);
     expect((await as(alice).post('/posts', { text: 'look', quotedPostId: postId })).status).toBe(
       403,

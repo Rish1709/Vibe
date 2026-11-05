@@ -129,6 +129,8 @@ export interface ProfileDto extends PublicProfileDto {
   viewer: ViewerRelationship | null;
   /** False for private accounts the viewer doesn't follow, and for blocked accounts. */
   canViewContent: boolean;
+  /** Whether the viewer may message them (their message policy, blocks). False on your own profile. */
+  canMessage: boolean;
 }
 
 /** The signed-in user's own account. Includes private fields. */

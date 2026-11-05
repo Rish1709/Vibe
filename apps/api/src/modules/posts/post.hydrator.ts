@@ -1,6 +1,6 @@
 import type { PostDto, UserSummaryDto } from '@vibe/shared';
 import { Types } from 'mongoose';
-import { canViewContent } from '../../policies/visibility.js';
+import { canReshare, canViewContent } from '../../policies/visibility.js';
 import { BookmarkModel, LikeModel } from '../engagement/engagement.models.js';
 import { toMediaDto } from '../media/media.service.js';
 import { getRelationships } from '../relationships/relationship.service.js';
@@ -40,6 +40,13 @@ export async function hydratePosts(viewerId: string, posts: PostRecord[]): Promi
     const author = authors.get(hex(post.authorId));
     const rel = relationships.get(hex(post.authorId));
     return author && rel && canViewContent(rel, author) ? author.summary : null;
+  };
+
+  /** Same rule the repost and quote endpoints enforce, so the UI only offers what will succeed. */
+  const mayReshare = (post: PostRecord): boolean => {
+    const author = authors.get(hex(post.authorId));
+    const rel = relationships.get(hex(post.authorId));
+    return author !== undefined && rel !== undefined && canReshare(rel, author);
   };
 
   const visibleIds = all.filter((post) => visibleAuthor(post) !== null).map((post) => post._id);
@@ -83,6 +90,7 @@ export async function hydratePosts(viewerId: string, posts: PostRecord[]): Promi
         bookmarked: bookmarked.has(id),
         reposted: reposted.has(id),
         isAuthor: post.authorId.equals(viewer),
+        canReshare: mayReshare(post),
       },
       createdAt: post.createdAt.toISOString(),
       editedAt: post.editedAt?.toISOString() ?? null,

@@ -2,6 +2,8 @@ import { Redis } from 'ioredis';
 import { pino } from 'pino';
 import { createApp, type AppDependencies } from '../../src/app.js';
 import { createRecordingFeedQueue } from '../../src/modules/feed/feed.queue.js';
+import { createRecordingMaintenanceQueue } from '../../src/modules/maintenance/maintenance.queue.js';
+import { createRecordingNotificationQueue } from '../../src/modules/notifications/notification.queue.js';
 
 export const silentLogger = pino({ level: 'silent' });
 
@@ -33,6 +35,8 @@ export function buildTestApp(overrides: Partial<AppDependencies> = {}) {
     identityProvider: { getUser: neverUsed('identityProvider') },
     feedQueue: createRecordingFeedQueue(),
     mediaProvider: null,
+    notificationQueue: createRecordingNotificationQueue(),
+    maintenanceQueue: createRecordingMaintenanceQueue(),
     ...overrides,
   });
 }

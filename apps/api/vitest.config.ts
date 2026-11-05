@@ -16,5 +16,9 @@ export default defineConfig({
     // The first run downloads a MongoDB binary for mongodb-memory-server.
     hookTimeout: 120_000,
     testTimeout: 15_000,
+    // Every file shares one in-memory mongod. Several files deliberately fire bursts of concurrent
+    // requests (race tests); with one file per core they starve each other into request timeouts.
+    // A few files at a time keeps the race tests strict without making them compete.
+    maxWorkers: 4,
   },
 });

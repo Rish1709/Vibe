@@ -7,6 +7,7 @@ import { PostModel, type PostRecord } from '../posts/post.model.js';
 import { getRelationships } from '../relationships/relationship.service.js';
 import { findUserSummaries } from '../users/user.queries.js';
 import type { AuthUser } from '../users/user.service.js';
+import type { NotificationHooks } from '../notifications/notification.hooks.js';
 import { CommentModel, type CommentRecord } from './comment.model.js';
 
 interface PageInput {
@@ -27,7 +28,7 @@ async function loadCommentablePost(viewer: AuthUser, postId: string): Promise<Po
 
 export type CommentService = ReturnType<typeof createCommentService>;
 
-export function createCommentService() {
+export function createCommentService({ notifier, notifications }: NotificationHooks) {
   /**
    * Batch hydration: one query for authors and three for relationships, whatever the page size.
    * Comments by people the viewer blocked, or who blocked the viewer, are dropped. Filtering after the
@@ -71,13 +72,18 @@ export function createCommentService() {
       const post = await loadCommentablePost(viewer, postId);
 
       let rootId: Types.ObjectId | null = null;
+      let rootAuthorId: Types.ObjectId | null = null;
       if (input.parentId) {
         const parent = await CommentModel.findOne(
           { _id: input.parentId, postId: post._id, deletedAt: null },
-          { parentId: 1 },
+          { parentId: 1, authorId: 1 },
         ).lean();
         if (!parent) throw Errors.notFound('Comment not found');
         rootId = parent.parentId ?? parent._id;
+        rootAuthorId = parent.parentId
+          ? ((await CommentModel.findById(parent.parentId, { authorId: 1 }).lean())?.authorId ??
+            null)
+          : parent.authorId;
       }
 
       const created = await CommentModel.create({
@@ -92,6 +98,18 @@ export function createCommentService() {
           ? CommentModel.updateOne({ _id: rootId }, { $inc: { 'counts.replies': 1 } })
           : Promise.resolve(),
       ]);
+      const event = {
+        actorId: viewer.id,
+        postId: post._id.toHexString(),
+        commentId: created._id.toHexString(),
+      };
+      // A reply notifies the thread's author; the post's author hears about every comment.
+      if (rootAuthorId) {
+        notifier.notify({ ...event, type: 'reply', recipientId: rootAuthorId.toHexString() });
+      }
+      if (!rootAuthorId?.equals(post.authorId)) {
+        notifier.notify({ ...event, type: 'comment', recipientId: post.authorId.toHexString() });
+      }
       const [dto] = await toDtos(viewer, post, [created.toObject<CommentRecord>()]);
       if (!dto) throw Errors.internal(new Error('Created comment failed to hydrate'));
       return dto;
@@ -170,6 +188,7 @@ export function createCommentService() {
         deleted.parentId
           ? CommentModel.updateOne({ _id: deleted.parentId }, { $inc: { 'counts.replies': -1 } })
           : Promise.resolve(),
+        notifications.retractForComment(commentId),
       ]);
     },
   };

@@ -127,7 +127,9 @@ export function createMediaService({
         // The record stays pending, so the client can simply call complete again.
         if (err instanceof MediaProviderUnavailableError) {
           logger.warn({ err, mediaId, fileId }, 'ImageKit unavailable while verifying upload');
-          throw Errors.serviceUnavailable('Could not verify your upload right now. Please try again.');
+          throw Errors.serviceUnavailable(
+            'Could not verify your upload right now. Please try again.',
+          );
         }
         throw err;
       }

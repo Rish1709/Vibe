@@ -31,7 +31,7 @@ Tests: shared 11, API 32, web 7. All passing.
 ## Phase 3: Authentication and users
 
 - [x] Clerk session-token verification (HTTP) behind a `TokenVerifier` interface; `azp` enforced
-- [ ] Socket.IO handshake authentication (moved to Phase 7, where sockets are introduced)
+- [x] Socket.IO handshake authentication (Phase 7)
 - [x] Lazy user provisioning on first request (race-safe via unique index on `clerkId`)
 - [x] Clerk webhook sync: signature + replay check, out-of-order guard, tombstones on delete
 - [x] Auth-user cache in Redis (cache-aside, jittered TTL, invalidation on rename/delete, fails open)
@@ -62,9 +62,8 @@ were mutation-checked (each fails when its guard is removed).
 - [x] Frontend: composer, post card (optimistic like/bookmark/repost with rollback), quotes,
       post detail with comments, follow button, followers/following lists, bookmarks, follow
       requests and blocked accounts in settings, infinite scroll
-- [ ] Cascade cleanup of a deleted post's likes/comments/bookmarks (Phase 7 background job;
-      hydration already hides them)
-- [ ] Counter reconciliation job (Phase 7)
+- [x] Cascade cleanup of a deleted post's likes/comments/bookmarks (Phase 7)
+- [x] Counter reconciliation job (Phase 7)
 - [~] Live click-through with a real account (pending)
 
 Tests: shared 27, API 113, web 27. Mutation-checked: like counting, follow/block race (both
@@ -114,6 +113,23 @@ atomic claim.
 - [x] Search page: debounced, query in the URL, follow / request / cancel from results
 - [ ] Live check in the browser
 
-## Phases 7–10
+## Phase 7: Real-time messaging and notifications
+
+- [x] Socket.IO on every API instance with the Redis adapter; the worker publishes via the Redis emitter
+- [x] Handshake auth with the same Clerk verification as REST; coded rejections; deletion disconnects
+- [x] Direct messages: race-safe get-or-create, idempotent sends (clientId), exact unread counts under
+      concurrency, conditional inbox preview, read receipts, typing relay (members only, throttled)
+- [x] Message policy ("everyone" / "following") with the reply exception; blocks both ways
+- [x] Notifications for likes, comments, replies, follows, requests and accepts: BullMQ worker, dedupe
+      key, "insert, then check" against undo races, live unread count, read-time visibility
+- [x] Post cascade job (batched, idempotent) and daily counter reconciliation (quiet-counter rule)
+- [x] Frontend: inbox, conversation (optimistic send with retry, typing, Seen), notifications page,
+      nav badges, Message button on profiles, refetch after reconnect
+- [ ] Live check in the browser with two accounts
+
+Mutation-checked: the notification re-check after insert, the reconciler's quiet rule, side-effect-free
+send retries.
+
+## Phases 8–10
 
 See the roadmap in `README.md`.

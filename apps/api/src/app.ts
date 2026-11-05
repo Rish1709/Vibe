@@ -38,6 +38,17 @@ import { createSearchRouter } from './modules/search/search.routes.js';
 import { createSearchService } from './modules/search/search.service.js';
 import { createFollowService } from './modules/relationships/follow.service.js';
 import { createUserRouter } from './modules/users/user.routes.js';
+import type { MaintenanceQueue } from './modules/maintenance/maintenance.queue.js';
+import { createMessageRouter } from './modules/messages/message.routes.js';
+import { createMessageService } from './modules/messages/message.service.js';
+import {
+  createNotifier,
+  type NotificationQueue,
+} from './modules/notifications/notification.queue.js';
+import { createNotificationRouter } from './modules/notifications/notification.routes.js';
+import { createNotificationService } from './modules/notifications/notification.service.js';
+import { registerGateway, type RealtimeServer } from './realtime/gateway.js';
+import { createSocketPublisher, type RealtimePublisher } from './realtime/publisher.js';
 import { createUserService } from './modules/users/user.service.js';
 import { createClerkWebhookRouter } from './modules/webhooks/clerk.webhook.js';
 
@@ -61,7 +72,21 @@ export interface AppDependencies {
   feedQueue: FeedQueue;
   /** Null when ImageKit is not configured: media endpoints then answer 503. */
   mediaProvider: MediaProvider | null;
+  notificationQueue: NotificationQueue;
+  maintenanceQueue: MaintenanceQueue;
+  /**
+   * The Socket.IO server to register the gateway on (server.ts attaches it to the HTTP server).
+   * Optional so REST-only tests need no sockets; pushes then go to `realtime`, or nowhere.
+   */
+  io?: RealtimeServer;
+  /** Overrides the publisher (tests record pushes). Defaults to one backed by `io`. */
+  realtime?: RealtimePublisher;
 }
+
+const silentPublisher: RealtimePublisher = {
+  toUser: () => undefined,
+  disconnectUser: () => undefined,
+};
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,128}$/;
 const JSON_BODY_LIMIT = '100kb';
@@ -79,9 +104,14 @@ export function createApp({
   identityProvider,
   feedQueue,
   mediaProvider,
+  notificationQueue,
+  maintenanceQueue,
+  io,
+  realtime: realtimeOverride,
 }: AppDependencies): Express {
+  const realtime = realtimeOverride ?? (io ? createSocketPublisher(io) : silentPublisher);
   const media = createMediaService({ provider: mediaProvider, logger });
-  const users = createUserService({ redis, logger, identity: identityProvider, media });
+  const users = createUserService({ redis, logger, identity: identityProvider, media, realtime });
   const auth = createAuthMiddleware(tokenVerifier, users);
   const limiter = createRedisRateLimiter(redis);
   const timeline = createTimelineStore(redis);
@@ -92,6 +122,20 @@ export function createApp({
     logger,
   });
   const feed = createFeedService({ redis, logger, timeline });
+  const notifications = createNotificationService({ realtime });
+  const hooks = { notifier: createNotifier({ queue: notificationQueue, logger }), notifications };
+  const messages = createMessageService({ realtime });
+  if (io) {
+    registerGateway({
+      io,
+      tokenVerifier,
+      users,
+      otherParticipant: (conversationId, userId) =>
+        messages.otherParticipant(conversationId, userId),
+      publisher: realtime,
+      logger,
+    });
+  }
 
   const app = express();
 
@@ -171,9 +215,9 @@ export function createApp({
   const api = express.Router();
   api.use(auth.requireAuth, rateLimit(limiter, RateLimits.authenticated));
   const { postRouter, commentRouter, userContentRouter } = createContentRouters({
-    posts: createPostService({ feed: feedWriter, media }),
-    engagement: createEngagementService(),
-    comments: createCommentService(),
+    posts: createPostService({ feed: feedWriter, media, maintenance: maintenanceQueue, logger }),
+    engagement: createEngagementService(hooks),
+    comments: createCommentService(hooks),
     auth,
     limiter,
   });
@@ -182,7 +226,7 @@ export function createApp({
   api.use(
     '/users',
     createRelationshipRouter({
-      follows: createFollowService({ feed: feedWriter }),
+      follows: createFollowService({ feed: feedWriter, ...hooks }),
       blocks: createBlockService({ feed: feedWriter }),
       auth,
       limiter,
@@ -200,6 +244,8 @@ export function createApp({
   api.use('/users', userStoriesRouter);
   api.use('/media', createMediaRouter({ media, auth, limiter }));
   api.use('/search', createSearchRouter({ search: createSearchService(), auth, limiter }));
+  api.use('/conversations', createMessageRouter({ messages, auth, limiter }));
+  api.use('/notifications', createNotificationRouter({ notifications, messages, auth }));
   app.use('/api/v1', api);
 
   app.use(notFound);

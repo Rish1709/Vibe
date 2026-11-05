@@ -6,6 +6,7 @@ import { canFollow, canSeeProfile, canViewContent } from '../../policies/visibil
 import { adjustFollowCounts, findUserSummaries, requireActiveUser } from '../users/user.queries.js';
 import type { AuthUser } from '../users/user.service.js';
 import type { FeedWriter } from '../feed/feed.writer.js';
+import type { NotificationHooks } from '../notifications/notification.hooks.js';
 import { FollowModel, type FollowRecord } from './follow.model.js';
 import { getRelationship, getRelationships, isBlockedEitherWay } from './relationship.service.js';
 
@@ -16,7 +17,18 @@ interface PageInput {
 
 export type FollowService = ReturnType<typeof createFollowService>;
 
-export function createFollowService({ feed }: { feed: FeedWriter }) {
+export function createFollowService({
+  feed,
+  notifier,
+  notifications,
+}: { feed: FeedWriter } & NotificationHooks) {
+  /** "X followed you" or "X wants to follow you", depending on the edge status. */
+  const followEvent = (followerId: string, followeeId: string, status: 'active' | 'pending') => ({
+    type: status === 'active' ? ('follow' as const) : ('follow_request' as const),
+    actorId: followerId,
+    recipientId: followeeId,
+  });
+
   /** Converts edges into user list items, dropping deleted accounts, with the viewer's follow state. */
   async function toUserList(
     viewer: AuthUser,
@@ -102,6 +114,7 @@ export function createFollowService({ feed }: { feed: FeedWriter }) {
       }
       // A new active followee's posts should appear: rebuild the follower's timeline lazily.
       if (status === 'active') await feed.onGraphChanged([viewer.id]);
+      notifier.notify(followEvent(viewer.id, targetId, status));
       return { following: status };
     },
 
@@ -115,6 +128,7 @@ export function createFollowService({ feed }: { feed: FeedWriter }) {
         await adjustFollowCounts(viewer.id, targetId, -1);
         await feed.onGraphChanged([viewer.id]);
       }
+      if (removed) await notifications.retract(followEvent(viewer.id, targetId, removed.status));
       return { following: 'none' };
     },
 
@@ -127,6 +141,7 @@ export function createFollowService({ feed }: { feed: FeedWriter }) {
         await adjustFollowCounts(followerId, viewer.id, -1);
         await feed.onGraphChanged([followerId]);
       }
+      if (removed) await notifications.retract(followEvent(followerId, viewer.id, removed.status));
     },
 
     /** The pending -> active transition is a conditional update, so double-accepts count once. */
@@ -137,17 +152,23 @@ export function createFollowService({ feed }: { feed: FeedWriter }) {
         { projection: { followerId: 1 } },
       ).lean();
       if (!accepted) throw Errors.notFound('Follow request not found');
+      const followerId = accepted.followerId.toHexString();
       await adjustFollowCounts(accepted.followerId, viewer.id, 1);
-      await feed.onGraphChanged([accepted.followerId.toHexString()]);
+      await feed.onGraphChanged([followerId]);
+      // The request is answered: it leaves the viewer's notifications, and the requester hears back.
+      await notifications.retract(followEvent(followerId, viewer.id, 'pending'));
+      notifier.notify({ type: 'follow_accept', actorId: viewer.id, recipientId: followerId });
     },
 
     async declineRequest(viewer: AuthUser, requestId: string): Promise<void> {
-      const removed = await FollowModel.deleteOne({
-        _id: requestId,
-        followeeId: viewer.id,
-        status: 'pending',
-      });
-      if (removed.deletedCount === 0) throw Errors.notFound('Follow request not found');
+      const removed = await FollowModel.findOneAndDelete(
+        { _id: requestId, followeeId: viewer.id, status: 'pending' },
+        { projection: { followerId: 1 } },
+      ).lean();
+      if (!removed) throw Errors.notFound('Follow request not found');
+      await notifications.retract(
+        followEvent(removed.followerId.toHexString(), viewer.id, 'pending'),
+      );
     },
 
     async listRequests(viewer: AuthUser, page: PageInput) {

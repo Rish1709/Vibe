@@ -2,6 +2,8 @@ import { NavLink, Outlet } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Logo } from '@/components/ui/Logo';
 import { useMe } from '@/features/account/api';
+import { useUnreadCounts } from '@/features/messages/api';
+import { useRealtime } from '@/features/realtime/useRealtime';
 import { StoryViewer } from '@/features/stories/StoryViewer';
 import { navItems } from '../navigation';
 
@@ -16,10 +18,49 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
  * and a labelled sidebar on desktop. The content column stays a readable width throughout.
  * Rendered only behind RequireOnboarded, so the account is always loaded here.
  */
+function Badge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="absolute -top-1 -right-1.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] leading-4 font-bold text-accent-contrast">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
+/** Live socket and unread badges for the signed-in shell. */
+function useShell(meId: string) {
+  useRealtime(meId);
+  const { data: counts } = useUnreadCounts();
+  return (badge: 'messages' | 'notifications' | undefined) => (badge ? (counts?.[badge] ?? 0) : 0);
+}
+
 export function AppLayout() {
   const { data: me } = useMe();
   if (!me?.username) return null;
-  const items = navItems(me.username);
+  return (
+    <Shell
+      meId={me.id}
+      username={me.username}
+      displayName={me.displayName}
+      avatarUrl={me.avatarUrl}
+    />
+  );
+}
+
+function Shell({
+  meId,
+  username,
+  displayName,
+  avatarUrl,
+}: {
+  meId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}) {
+  const countFor = useShell(meId);
+  const items = navItems(username);
+  const me = { username, displayName, avatarUrl };
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-6xl">
@@ -33,12 +74,24 @@ export function AppLayout() {
           </span>
         </div>
         <nav aria-label="Primary" className="flex flex-col gap-1">
-          {items.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end className={linkClass}>
-              <Icon className="size-6 shrink-0" />
-              <span className="hidden lg:inline">{label}</span>
-            </NavLink>
-          ))}
+          {items.map(({ to, label, icon: Icon, badge }) => {
+            const count = countFor(badge);
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                aria-label={count > 0 ? `${label}, ${count} unread` : undefined}
+                className={linkClass}
+              >
+                <span className="relative">
+                  <Icon className="size-6 shrink-0" />
+                  <Badge count={count} />
+                </span>
+                <span className="hidden lg:inline">{label}</span>
+              </NavLink>
+            );
+          })}
         </nav>
         <NavLink
           to={`/${me.username}`}
@@ -64,17 +117,21 @@ export function AppLayout() {
         aria-label="Primary mobile"
         className="fixed inset-x-0 bottom-0 z-10 flex justify-around border-t border-border bg-bg/90 py-2 backdrop-blur sm:hidden"
       >
-        {items.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end
-            aria-label={label}
-            className={({ isActive }) => `p-2 ${isActive ? 'text-text' : 'text-muted'}`}
-          >
-            <Icon className="size-6" />
-          </NavLink>
-        ))}
+        {items.map(({ to, label, icon: Icon, badge }) => {
+          const count = countFor(badge);
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              aria-label={count > 0 ? `${label}, ${count} unread` : label}
+              className={({ isActive }) => `relative p-2 ${isActive ? 'text-text' : 'text-muted'}`}
+            >
+              <Icon className="size-6" />
+              <Badge count={count} />
+            </NavLink>
+          );
+        })}
       </nav>
     </div>
   );

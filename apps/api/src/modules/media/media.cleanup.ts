@@ -2,7 +2,7 @@ import type { MediaProvider } from '../../infra/imagekit.js';
 import type { Logger } from '../../infra/logger.js';
 import { MediaModel } from './media.model.js';
 
-export const MAINTENANCE_QUEUE = 'maintenance';
+export { MAINTENANCE_QUEUE } from '../maintenance/maintenance.queue.js';
 export const MEDIA_CLEANUP_JOB = 'media-cleanup';
 export const MEDIA_CLEANUP_EVERY_MS = 60 * 60 * 1000;
 

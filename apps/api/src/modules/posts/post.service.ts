@@ -9,7 +9,9 @@ import { Types } from 'mongoose';
 import { Errors, isDuplicateKeyError } from '../../lib/errors.js';
 import { keysetFilter, keysetPage, keysetSort } from '../../lib/keyset.js';
 import { canReshare, canSeeProfile, canViewContent } from '../../policies/visibility.js';
+import type { Logger } from '../../infra/logger.js';
 import type { FeedWriter } from '../feed/feed.writer.js';
+import type { MaintenanceQueue } from '../maintenance/maintenance.queue.js';
 import type { MediaService } from '../media/media.service.js';
 import { getRelationship } from '../relationships/relationship.service.js';
 import { UserModel } from '../users/user.model.js';
@@ -40,7 +42,17 @@ async function incrementReposts(postId: Types.ObjectId | string, delta: 1 | -1) 
 
 export type PostService = ReturnType<typeof createPostService>;
 
-export function createPostService({ feed, media }: { feed: FeedWriter; media: MediaService }) {
+export function createPostService({
+  feed,
+  media,
+  maintenance,
+  logger,
+}: {
+  feed: FeedWriter;
+  media: MediaService;
+  maintenance: MaintenanceQueue;
+  logger: Logger;
+}) {
   async function hydrateOne(viewer: AuthUser, post: PostRecord): Promise<PostDto> {
     const [dto] = await hydratePosts(viewer.id, [post]);
     if (!dto) throw Errors.notFound('Post not found');
@@ -111,7 +123,7 @@ export function createPostService({ feed, media }: { feed: FeedWriter; media: Me
     /**
      * Soft delete. The conditional update (deletedAt: null) makes a double delete count once.
      * Likes, comments and bookmarks pointing at it are hidden by hydration immediately and purged by
-     * an idempotent background job (Phase 7).
+     * an idempotent background job (post.cascade.ts).
      */
     async remove(viewer: AuthUser, postId: string): Promise<void> {
       const deleted = await PostModel.findOneAndUpdate(
@@ -130,6 +142,11 @@ export function createPostService({ feed, media }: { feed: FeedWriter; media: Me
         feed.onPostRemoved(deleted),
         // The cleanup job deletes the files from the CDN.
         media.release((deleted.media ?? []).map((item) => item.mediaId)),
+        // The delete has happened, so a queue failure must not report it as failed. The leftovers are
+        // invisible to every read; they just occupy space until a later cascade.
+        maintenance
+          .enqueuePostCascade(deleted._id.toHexString())
+          .catch((err: unknown) => logger.warn({ err, postId }, 'Post cascade not queued')),
       ]);
     },
 

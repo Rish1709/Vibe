@@ -46,6 +46,9 @@ export function setAuthTokenGetter(getter: TokenGetter): void {
   getAuthToken = getter;
 }
 
+/** A fresh session token, for transports other than fetch (the realtime socket). */
+export const currentAuthToken = (): Promise<string | null> => getAuthToken();
+
 /**
  * Thin fetch wrapper: JSON in, typed envelope out, and every non-2xx response
  * (including network failures and non-JSON error pages) normalized into an ApiError.

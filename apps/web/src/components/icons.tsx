@@ -195,3 +195,29 @@ export function SearchIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function MessageIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z" />
+    </Icon>
+  );
+}
+
+export function BellIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z" />
+      <path d="M10 20a2.2 2.2 0 0 0 4 0" />
+    </Icon>
+  );
+}
+
+export function SendIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 12 20 4l-4 16-4-7z" />
+      <path d="m12 13 8-9" />
+    </Icon>
+  );
+}

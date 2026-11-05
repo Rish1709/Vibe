@@ -25,4 +25,10 @@ export const queryKeys = {
   storyViewers: (storyId: string) => ['stories', 'viewers', storyId] as const,
   blocks: ['blocks'] as const,
   userSearch: (q: string) => ['search', 'users', q] as const,
+
+  conversations: ['conversations'] as const,
+  conversation: (id: string) => ['conversations', 'detail', id] as const,
+  messages: (conversationId: string) => ['messages', conversationId] as const,
+  notifications: ['notifications'] as const,
+  unreadCounts: ['unread-counts'] as const,
 };

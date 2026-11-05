@@ -4,3 +4,6 @@ export * from './media.js';
 export * from './pagination.js';
 export * from './social.js';
 export * from './users.js';
+export * from './messages.js';
+export * from './notifications.js';
+export * from './realtime.js';

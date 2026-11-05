@@ -56,7 +56,13 @@ describe('route guards', () => {
       displayName: 'Grace Hopper',
       avatarUrl: null,
     };
-    const viewerFlags = { liked: false, bookmarked: false, reposted: false, isAuthor: false };
+    const viewerFlags = {
+      liked: false,
+      bookmarked: false,
+      reposted: false,
+      isAuthor: false,
+      canReshare: true,
+    };
     const calls = mockApi({
       'GET /api/v1/users/me': () => ({ json: { data: makeMe() } }),
       'GET /api/v1/feed': () => {

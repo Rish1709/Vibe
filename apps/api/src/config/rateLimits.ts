@@ -29,4 +29,6 @@ export const RateLimits = {
   storyViews: { name: 'story-view', limit: 300, windowMs: MINUTE },
   /** Search-as-you-type sends a request per pause in typing (debounced on the client). */
   search: { name: 'search', limit: 120, windowMs: MINUTE },
+  /** Sending messages and opening conversations. Generous for real chat, tight for spam. */
+  messageWrites: { name: 'message-write', limit: 60, windowMs: MINUTE },
 } satisfies Record<string, RateLimitPolicy>;

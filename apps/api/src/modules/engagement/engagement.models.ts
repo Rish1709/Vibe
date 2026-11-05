@@ -25,6 +25,8 @@ const bookmarkSchema = new Schema(
 bookmarkSchema.index({ userId: 1, postId: 1 }, { unique: true });
 // The viewer's saved posts, newest first.
 bookmarkSchema.index({ userId: 1, createdAt: -1, _id: -1 });
+// Cleanup when a post is deleted (the unique index leads with userId, so it can't serve this).
+bookmarkSchema.index({ postId: 1 });
 
 export type LikeRecord = InferSchemaType<typeof likeSchema> & {
   _id: Types.ObjectId;

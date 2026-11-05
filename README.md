@@ -78,9 +78,9 @@ delete stale unix-socket files; the script moves them aside and starts Docker.
 2. Foundation ✅
 3. Authentication and user management ✅
 4. Posts, comments, likes, follows ✅
-5. Feed architecture, indexing, Redis caching
-6. Stories and media
-7. Real-time messaging and notifications
+5. Feed architecture, indexing, Redis caching ✅
+6. Stories and media ✅
+7. Real-time messaging and notifications ✅
 8. Search and discovery
 9. Testing, performance and security review
 10. Docker, CI/CD, documentation

@@ -89,7 +89,14 @@ export interface PostDto {
   sharedPost: PostDto | null;
   sharedPostUnavailable: boolean;
   counts: { likes: number; comments: number; reposts: number };
-  viewer: { liked: boolean; bookmarked: boolean; reposted: boolean; isAuthor: boolean };
+  viewer: {
+    liked: boolean;
+    bookmarked: boolean;
+    reposted: boolean;
+    isAuthor: boolean;
+    /** Whether reposting or quoting is allowed (never for private accounts' posts). */
+    canReshare: boolean;
+  };
   createdAt: string;
   editedAt: string | null;
 }

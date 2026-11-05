@@ -40,3 +40,21 @@ export function canReshare(rel: Relationship, author: Author): boolean {
 export function canFollow(rel: Relationship): boolean {
   return !rel.isSelf && !rel.blockingViewer && !rel.blockedByViewer;
 }
+
+interface Recipient {
+  messagePolicy: 'everyone' | 'following';
+}
+
+/**
+ * Messaging is impossible across a block in either direction. Beyond that the recipient decides:
+ * "everyone", or "following" (only people the recipient follows). Someone who already wrote to the
+ * viewer can always be answered, otherwise a "following" account could message people who can't reply.
+ */
+export function canMessage(
+  rel: Relationship,
+  recipient: Recipient,
+  { recipientWroteFirst = false }: { recipientWroteFirst?: boolean } = {},
+): boolean {
+  if (rel.isSelf || rel.blockedByViewer || rel.blockingViewer) return false;
+  return recipient.messagePolicy === 'everyone' || rel.followedBy || recipientWroteFirst;
+}

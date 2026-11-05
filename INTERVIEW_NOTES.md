@@ -417,3 +417,92 @@ everywhere else. Queries are regex-escaped (`a.` must not match `axb`) and rate 
 **Limits and what's next.** Prefix matching only: no typo tolerance and no ranking by relevance beyond the
 rules above. At scale this moves to a search engine (Atlas Search or OpenSearch with edge n-grams),
 fed by change streams. Phase 8 adds posts and hashtags.
+
+## Real-time messaging and notifications (Phase 7)
+
+### Architecture in one paragraph
+
+Durable writes go through REST; sockets only push. Sending a message is `POST /conversations/:id/messages`:
+validated, rate limited, idempotent, persisted, and only then pushed to both participants' sockets. If a
+push is lost (offline, reconnecting), nothing is lost: the client refetches what pushes would have changed
+on every reconnect. Socket.IO runs on every API instance with the **Redis adapter**, so an emit on
+instance A reaches a socket held by instance B (tested with two real instances). The worker has no
+sockets and publishes through the **Redis emitter**. Each socket joins a `user:<id>` room, so one emit
+reaches all of a user's tabs and devices.
+
+### Why REST for sends, not a socket event?
+
+- One write path with the same auth, validation, rate limits and error envelope as everything else.
+- Retries are explicit: the client generates a `clientId` (UUID) per message, and a unique index on
+  `(senderId, clientId)` turns a retried or double-tapped send into the same message with no repeated
+  side effects (tested with five concurrent retries: one message, unread count 1).
+- Sockets stay stateless and cheap: only pushes and ephemeral signals (typing).
+
+### Socket authentication
+
+The handshake carries a Clerk session token, verified exactly like a REST bearer token, and the user must
+be onboarded. Rejections carry a code (`UNAUTHENTICATED`, `ONBOARDING_REQUIRED`, `ACCOUNT_DELETED`) so the
+client can tell "sign in again" from a network error. A socket is trusted for its lifetime: tokens live
+about a minute, so re-verifying would force constant reconnects. Instead, account deletion disconnects the
+user's sockets, and every reconnect presents a fresh token (the client's auth callback runs per attempt).
+WebSocket transport only: no long-polling, so no sticky sessions are needed at the load balancer.
+
+### Data model
+
+- **Conversation**: one per pair; `key` = the two ids sorted, unique. "Open a conversation" is an upsert,
+  so ten concurrent opens from both sides create one (tested). Per-member `unread` and `lastReadAt` live
+  in a two-element array updated with `arrayFilters`; `lastMessage` is denormalized for the inbox.
+- **Message**: `{conversationId, createdAt, _id}` index for the thread (keyset, newest first).
+- **Inbox**: `{participants, lastMessageAt, _id}`, keyset on `lastMessageAt` (the keyset helper gained a
+  field parameter).
+
+**Concurrency.** Concurrent sends each `$inc` the recipient's unread count, which stays exact (12 concurrent
+sends give 12). The preview is set by a _conditional_ update (`lastMessageAt <= mine`), so the older of two
+racing messages can't overwrite the newer preview.
+
+**Message policy.** "Everyone" or "people I follow"; blocks forbid messaging both ways. Exception: if
+someone wrote to you first, you may answer whatever your policy says, otherwise a "following only"
+account could message people who can't reply.
+
+### Notifications: queue, dedupe, and the undo race
+
+A like enqueues a BullMQ job and returns; the worker creates the notification and pushes the new unread
+count. Notifications must never fail the action that caused them: an enqueue error is logged and dropped
+(the transactional outbox is the upgrade path for durability).
+
+- **Dedupe**: a `dedupeKey` (type, actor, target), unique per recipient. A retried job, or like, unlike,
+  like again, leaves exactly one notification. Completed jobs are removed at once, so the BullMQ job id
+  can't swallow a legitimate later event.
+- **The undo race**: an unlike lands while the job runs. The fix is "insert, then check": the worker
+  inserts the notification and then re-checks that the like still exists; the unlike deletes the like and
+  then the notification. In every interleaving one side sees the other. A test makes the worst case
+  deterministic (the unlike lands between insert and re-check) and fails if the re-check is removed.
+- **Read-time visibility**: blocked actors, deleted accounts and deleted posts drop out when listing.
+
+### Background jobs
+
+- **Post cascade**: deleting a post is instant (a soft delete; reads already hide its likes and comments).
+  A job then removes likes, bookmarks, comments and notifications in batches of 1,000 ids. It is
+  idempotent and refuses to touch a post that isn't deleted. It needed a new `bookmarks.postId` index:
+  the unique index leads with `userId`, so it can't serve a lookup by post.
+- **Counter reconciliation** (daily): recomputes followers, following, posts, likes, comments and reposts
+  from the edges, with the same rules as the live `$inc`s. The hazard: an edge write and its `$inc` are
+  two steps, so a counter read between them looks wrong but is about to be right, and "fixing" it would
+  create drift. So each batch is measured twice, a couple of seconds apart, and only **quiet** counters
+  (unchanged across both readings) that are still wrong are corrected, with a write conditional on the
+  stored value. A test injects a like between the measurements and fails if the quiet rule is removed.
+
+### Surprises worth telling
+
+- **The test suite starved itself.** Four new files with concurrency stress tests, eleven files in
+  parallel against one in-memory mongod with 3 GB free: requests hit the 5 s timeout, a different set each
+  run. Capped at four parallel files; the stress tests stay exactly as strict.
+- **Socket.IO ignores an async middleware's promise**, so a thrown error would leave the handshake
+  hanging. Authentication resolves to "user or error" and never rejects.
+
+### Limits and next steps
+
+- One-to-one conversations only; groups need a membership collection and per-member fan-out.
+- No notification grouping ("Ada and 5 others liked your post").
+- Pushes aren't queued for offline users; reconnect-and-refetch covers the web app. Mobile push would add
+  a per-device delivery queue.

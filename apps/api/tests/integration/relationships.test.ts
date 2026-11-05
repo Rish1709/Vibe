@@ -26,7 +26,7 @@ describe('follows', () => {
     const results = await Promise.all(
       Array.from({ length: 15 }, () => as(alice).put(`/users/${bob.id}/follow`)),
     );
-    expect(results.every((r) => r.status === 200)).toBe(true);
+    expect(results.map((r) => r.status)).toEqual(results.map(() => 200));
     expect(await FollowModel.countDocuments({ followeeId: bob.id })).toBe(1);
     expect((await world.profile(bob, 'bob')).counts.followers).toBe(1);
   });

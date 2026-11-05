@@ -20,7 +20,7 @@ const otherAuthor = {
 function setup(
   post = makePost({
     author: otherAuthor,
-    viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: false },
+    viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: false, canReshare: true },
     counts: { likes: 4, comments: 2, reposts: 1 },
   }),
   likeStatus = 200,
@@ -58,6 +58,37 @@ describe('PostCard', () => {
     await waitFor(() => expect(unlike).toHaveTextContent('10'));
   });
 
+  it('offers no repost for a private account’s post, and says why', async () => {
+    setup(
+      makePost({
+        author: otherAuthor,
+        viewer: {
+          liked: false,
+          bookmarked: false,
+          reposted: false,
+          isAuthor: false,
+          canReshare: false,
+        },
+      }),
+    );
+    const article = (await screen.findByText('hello world')).closest('article') as HTMLElement;
+    expect(
+      within(article).getByRole('img', { name: 'Reposting is off for private accounts' }),
+    ).toBeInTheDocument();
+    expect(
+      within(article).queryByRole('button', { name: 'Repost or quote' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the server’s reason when an action is refused, not "try again"', async () => {
+    setup(undefined, 403);
+    const user = userEvent.setup();
+    const article = (await screen.findByText('hello world')).closest('article') as HTMLElement;
+    await user.click(within(article).getByRole('button', { name: 'Like' }));
+    expect(await screen.findByText('boom')).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't update. Please try again.")).not.toBeInTheDocument();
+  });
+
   it('rolls the like back when the server fails', async () => {
     setup(undefined, 500);
     const user = userEvent.setup();
@@ -74,14 +105,26 @@ describe('PostCard', () => {
     const original = makePost({
       author: otherAuthor,
       text: 'the original',
-      viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: false },
+      viewer: {
+        liked: false,
+        bookmarked: false,
+        reposted: false,
+        isAuthor: false,
+        canReshare: true,
+      },
     });
     const repost = makePost({
       kind: 'repost',
       text: '',
       author: otherAuthor,
       sharedPost: original,
-      viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: false },
+      viewer: {
+        liked: false,
+        bookmarked: false,
+        reposted: false,
+        isAuthor: false,
+        canReshare: true,
+      },
     });
     const gone = makePost({
       kind: 'repost',
@@ -89,7 +132,13 @@ describe('PostCard', () => {
       author: otherAuthor,
       sharedPost: null,
       sharedPostUnavailable: true,
-      viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: false },
+      viewer: {
+        liked: false,
+        bookmarked: false,
+        reposted: false,
+        isAuthor: false,
+        canReshare: true,
+      },
     });
     mockApi({
       'GET /api/v1/users/me': () => ({ json: { data: me } }),

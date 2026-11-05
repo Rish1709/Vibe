@@ -13,7 +13,8 @@ import { CacheKeys } from '../../cache/keys.js';
 import type { Logger } from '../../infra/logger.js';
 import type { Redis } from '../../infra/redis.js';
 import { Errors, isDuplicateKeyError } from '../../lib/errors.js';
-import { canSeeProfile, canViewContent } from '../../policies/visibility.js';
+import { canMessage, canSeeProfile, canViewContent } from '../../policies/visibility.js';
+import type { RealtimePublisher } from '../../realtime/publisher.js';
 import type { MediaService } from '../media/media.service.js';
 import { getRelationship } from '../relationships/relationship.service.js';
 import type { IdentityProfile, IdentityProvider } from './identity.js';
@@ -48,11 +49,12 @@ interface UserServiceDeps {
   logger: Logger;
   identity: IdentityProvider;
   media: MediaService;
+  realtime: RealtimePublisher;
 }
 
 export type UserService = ReturnType<typeof createUserService>;
 
-export function createUserService({ redis, logger, identity, media }: UserServiceDeps) {
+export function createUserService({ redis, logger, identity, media, realtime }: UserServiceDeps) {
   const toAuthUser = (user: UserRecord): AuthUser => ({
     id: user._id.toHexString(),
     clerkId: user.clerkId,
@@ -146,15 +148,17 @@ export function createUserService({ redis, logger, identity, media }: UserServic
      * `user.created` event delivered after `user.deleted` cannot create the account.
      */
     async markDeleted(clerkId: string, deletedAt: Date): Promise<void> {
-      await UserModel.updateOne(
+      const user = await UserModel.findOneAndUpdate(
         { clerkId },
         {
           $set: { deletedAt, clerkUpdatedAt: deletedAt },
           $setOnInsert: { displayName: 'Deleted user', searchTokens: [] },
         },
-        { upsert: true },
-      );
+        { upsert: true, returnDocument: 'after', projection: { _id: 1 } },
+      ).lean();
       await invalidateAuthUser(clerkId);
+      // Sockets are authenticated once, at connect: end them so the account is offline everywhere.
+      if (user) realtime.disconnectUser(user._id.toHexString());
       // Phase 4: enqueue cascade cleanup (follows, posts, likes) as an idempotent background job.
     },
 
@@ -175,6 +179,8 @@ export function createUserService({ redis, logger, identity, media }: UserServic
           ? null
           : { following: rel.following, followedBy: rel.followedBy, blocking: rel.blockedByViewer },
         canViewContent: canViewContent(rel, user),
+        // Profiles don't check "they wrote first"; opening the conversation does, and it's rare.
+        canMessage: canMessage(rel, user),
       };
     },
 

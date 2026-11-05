@@ -218,26 +218,44 @@ export function PostCard({ post: item }: { post: PostDto }) {
             >
               <CommentIcon />
             </Action>
-            <Menu
-              label={post.viewer.reposted ? 'Undo repost or quote' : 'Repost or quote'}
-              trigger={
-                <span
-                  className={`inline-flex items-center gap-1.5 text-sm ${post.viewer.reposted ? 'text-emerald-500' : ''}`}
-                >
-                  <RepostIcon className="size-[18px]" />
-                  {post.counts.reposts > 0 && (
-                    <span className="tabular-nums">{compact.format(post.counts.reposts)}</span>
-                  )}
-                </span>
-              }
-              items={[
-                {
-                  label: post.viewer.reposted ? 'Undo repost' : 'Repost',
-                  onSelect: () => repost.mutate({ id: post.id, active: !post.viewer.reposted }),
-                },
-                { label: 'Quote', onSelect: () => setQuoting(true) },
-              ]}
-            />
+            {!post.viewer.canReshare && !post.viewer.reposted ? (
+              // Private accounts' posts can't be shared beyond their approved followers.
+              <span
+                role="img"
+                aria-label="Reposting is off for private accounts"
+                title="Posts from private accounts can't be reposted"
+                className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full p-2 text-sm text-muted opacity-40"
+              >
+                <RepostIcon className="size-[18px]" />
+                {post.counts.reposts > 0 && (
+                  <span className="tabular-nums">{compact.format(post.counts.reposts)}</span>
+                )}
+              </span>
+            ) : (
+              <Menu
+                label={post.viewer.reposted ? 'Undo repost or quote' : 'Repost or quote'}
+                trigger={
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-sm ${post.viewer.reposted ? 'text-emerald-500' : ''}`}
+                  >
+                    <RepostIcon className="size-[18px]" />
+                    {post.counts.reposts > 0 && (
+                      <span className="tabular-nums">{compact.format(post.counts.reposts)}</span>
+                    )}
+                  </span>
+                }
+                items={[
+                  {
+                    label: post.viewer.reposted ? 'Undo repost' : 'Repost',
+                    onSelect: () => repost.mutate({ id: post.id, active: !post.viewer.reposted }),
+                  },
+                  // Undoing stays possible even if the author has since gone private.
+                  ...(post.viewer.canReshare
+                    ? [{ label: 'Quote', onSelect: () => setQuoting(true) }]
+                    : []),
+                ]}
+              />
+            )}
             <Action
               label={post.viewer.liked ? 'Unlike' : 'Like'}
               count={post.counts.likes}

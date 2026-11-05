@@ -7,6 +7,13 @@ import { appRoutes } from '@/app/routes';
 
 type Handler = (body: unknown) => { status?: number; json: unknown };
 
+/** Requests every signed-in screen makes; tests override them by naming the same route. */
+const DEFAULT_ROUTES: Record<string, Handler> = {
+  'GET /api/v1/notifications/unread-counts': () => ({
+    json: { data: { messages: 0, notifications: 0 } },
+  }),
+};
+
 /**
  * Stubs `fetch` with a route table keyed by "METHOD /path" (query strings ignored).
  * Unmatched requests fail the test loudly instead of hanging.
@@ -25,7 +32,8 @@ export function mockApi(routes: Record<string, Handler>) {
       headers: new Headers(init?.headers),
     });
 
-    const handler = routes[`${method} ${url.pathname}`];
+    const handler =
+      routes[`${method} ${url.pathname}`] ?? DEFAULT_ROUTES[`${method} ${url.pathname}`];
     if (!handler) return Promise.reject(new Error(`Unmocked request: ${method} ${url.pathname}`));
     const { status = 200, json } = handler(body);
     return Promise.resolve(
@@ -80,6 +88,7 @@ export function makeProfile(overrides: Partial<ProfileDto> = {}): ProfileDto {
     createdAt: '2026-01-15T10:00:00.000Z',
     viewer: { following: 'none', followedBy: false, blocking: false },
     canViewContent: true,
+    canMessage: true,
     ...overrides,
   };
 }
@@ -102,7 +111,7 @@ export function makePost(overrides: Partial<PostDto> = {}): PostDto {
     sharedPost: null,
     sharedPostUnavailable: false,
     counts: { likes: 0, comments: 0, reposts: 0 },
-    viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: true },
+    viewer: { liked: false, bookmarked: false, reposted: false, isAuthor: true, canReshare: true },
     createdAt: new Date().toISOString(),
     editedAt: null,
     ...overrides,

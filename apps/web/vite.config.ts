@@ -21,6 +21,8 @@ export default defineConfig({
     proxy: {
       '/api': API_TARGET,
       '/health': API_TARGET,
+      // The realtime socket (WebSocket upgrade) goes to the API too.
+      '/socket.io': { target: API_TARGET, ws: true },
     },
   },
   test: {
@@ -29,5 +31,8 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     // The first render in a fresh jsdom environment can exceed the 5s default on loaded machines.
     testTimeout: 15_000,
+    // Each worker boots its own jsdom. One per core exhausts memory on small machines and workers
+    // time out while starting; a few at a time is barely slower.
+    maxWorkers: 4,
   },
 });
