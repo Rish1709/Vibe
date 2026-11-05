@@ -154,11 +154,24 @@ User search was pulled forward into Phase 6. Mutation-checked: trending's author
       documented exceptions
 - [x] Fixed: stories sorted in memory (index now `{authorId, expiresAt, _id}`)
 - [x] Fixed: requests that could hang forever (offline pause, no deadline on token or fetch)
-- [ ] Load testing: deferred to Phase 10, against the deployed stack
+- [x] Load testing: done in Phase 10 (below)
 
 Mutation-checked: three authorization guards (edit ownership, reply parent, media owner), the story
 sort, and the client deadline.
 
-## Phase 10
+## Phase 10: Docker, CI/CD, documentation
 
-See the roadmap in `README.md`.
+- [x] Multi-stage `Dockerfile`: API/worker image (production dependencies only, non-root, health check)
+      and web image (unprivileged nginx serving the build, proxying `/api` and `/socket.io`)
+- [x] `npm run stack:up` / `stack:down`: the production build of the whole app in compose, verified
+      (health, SPA routes, security headers, API through the proxy, JSON logs, worker consuming)
+- [x] GitHub Actions: audit, format, lint, types, tests (Redis service), build, both images; publish to
+      GHCR from `main` (refuses to publish a web image without the real Clerk key)
+- [x] Load test of the production server build (`npm run load-test -w @vibe/api`): throughput and
+      latency by concurrency, plus database round trips per request
+- [x] Fixed from the load test: post and profile pages re-read what their access check had loaded
+      (12 → 8 queries); a query-budget test guards it, including no N+1 across page sizes
+- [x] Docs: architecture, database design, API design, scalability, engineering decisions
+- [ ] CI run on GitHub: needs a repository (the workflow parses, but hasn't run)
+
+Mutation-checked: the query budget (reverting the reuse fails it).

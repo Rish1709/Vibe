@@ -15,11 +15,11 @@ import type { MaintenanceQueue } from '../maintenance/maintenance.queue.js';
 import type { MediaService } from '../media/media.service.js';
 import { getRelationship } from '../relationships/relationship.service.js';
 import { UserModel } from '../users/user.model.js';
-import { requireActiveUser } from '../users/user.queries.js';
+import { requireActiveUser, toAuthorInfo } from '../users/user.queries.js';
 import type { AuthUser } from '../users/user.service.js';
 import { extractHashtags } from './hashtags.js';
 import { loadVisiblePost } from './post.access.js';
-import { hydratePosts } from './post.hydrator.js';
+import { hydratePosts, type KnownAuthor } from './post.hydrator.js';
 import { PostModel, type PostRecord } from './post.model.js';
 
 /** Reposts and quotes target the underlying original, so chains never form. */
@@ -53,8 +53,12 @@ export function createPostService({
   maintenance: MaintenanceQueue;
   logger: Logger;
 }) {
-  async function hydrateOne(viewer: AuthUser, post: PostRecord): Promise<PostDto> {
-    const [dto] = await hydratePosts(viewer.id, [post]);
+  async function hydrateOne(
+    viewer: AuthUser,
+    post: PostRecord,
+    known: KnownAuthor[] = [],
+  ): Promise<PostDto> {
+    const [dto] = await hydratePosts(viewer.id, [post], known);
     if (!dto) throw Errors.notFound('Post not found');
     return dto;
   }
@@ -104,8 +108,11 @@ export function createPostService({
     },
 
     async get(viewer: AuthUser, postId: string): Promise<PostDto> {
-      const { post } = await loadVisiblePost(viewer.id, postId);
-      return hydrateOne(viewer, post);
+      const { post, author, rel } = await loadVisiblePost(viewer.id, postId);
+      // The access check already loaded the author and relationship: don't read them twice.
+      return hydrateOne(viewer, post, [
+        { id: author._id.toHexString(), author: toAuthorInfo(author), relationship: rel },
+      ]);
     },
 
     /** Only the author's own originals and quotes; reposts have no text of their own. */
@@ -170,7 +177,10 @@ export function createPostService({
         .limit(limit + 1)
         .lean<PostRecord[]>();
       const { items, meta } = keysetPage(rows, limit);
-      return { items: await hydratePosts(viewer.id, items), meta };
+      const known = [
+        { id: author._id.toHexString(), author: toAuthorInfo(author), relationship: rel },
+      ];
+      return { items: await hydratePosts(viewer.id, items, known), meta };
     },
 
     /** Idempotent: the partial unique index allows one plain repost per user per post. */

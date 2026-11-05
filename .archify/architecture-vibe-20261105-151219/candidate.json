@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Vibe: system architecture",
+    "output": ".archify/architecture-vibe-20261105-151219/vibe-architecture.html",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "User",
+      "sublabel": "browser",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Web app",
+      "sublabel": "React SPA · TanStack Query",
+      "pos": [
+        250,
+        260
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "clerk",
+      "type": "security",
+      "label": "Clerk",
+      "sublabel": "sign-in · session JWTs",
+      "pos": [
+        250,
+        60
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "imagekit",
+      "type": "cloud",
+      "label": "ImageKit CDN",
+      "sublabel": "photos · video · stories",
+      "pos": [
+        520,
+        60
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API server",
+      "sublabel": "Express 5 · REST /api/v1",
+      "tag": "verifies Clerk JWT",
+      "pos": [
+        520,
+        260
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "Socket.IO gateway",
+      "sublabel": "room per user",
+      "pos": [
+        520,
+        460
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "mongo",
+      "type": "database",
+      "label": "MongoDB",
+      "sublabel": "replica set · source of truth",
+      "pos": [
+        800,
+        60
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "queues",
+      "type": "messagebus",
+      "label": "BullMQ queues",
+      "sublabel": "fan-out · notify · maintain",
+      "pos": [
+        800,
+        260
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "cache · timelines · limits",
+      "pos": [
+        800,
+        460
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker",
+      "sublabel": "jobs + schedules",
+      "pos": [
+        1080,
+        260
+      ],
+      "size": [
+        150,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "API process · stateless, ×N instances",
+      "wraps": [
+        "api",
+        "gateway"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-web",
+      "from": "user",
+      "to": "web",
+      "label": "uses",
+      "variant": "emphasis"
+    },
+    {
+      "id": "web-clerk",
+      "from": "web",
+      "to": "clerk",
+      "label": "sign in",
+      "variant": "security"
+    },
+    {
+      "id": "web-api",
+      "from": "web",
+      "to": "api",
+      "label": "REST + JWT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "web-imagekit",
+      "from": "web",
+      "to": "imagekit",
+      "label": "signed upload"
+    },
+    {
+      "id": "web-gateway",
+      "from": "gateway",
+      "to": "web",
+      "label": "live events"
+    },
+    {
+      "id": "api-imagekit",
+      "from": "api",
+      "to": "imagekit",
+      "label": "verify upload"
+    },
+    {
+      "id": "api-mongo",
+      "from": "api",
+      "to": "mongo",
+      "label": "read / write"
+    },
+    {
+      "id": "api-queues",
+      "from": "api",
+      "to": "queues",
+      "label": "enqueue",
+      "variant": "dashed"
+    },
+    {
+      "id": "api-gateway",
+      "from": "api",
+      "to": "gateway",
+      "label": "emit"
+    },
+    {
+      "id": "api-redis",
+      "from": "api",
+      "to": "redis",
+      "label": "cache · limits"
+    },
+    {
+      "id": "queues-worker",
+      "from": "queues",
+      "to": "worker",
+      "label": "consume",
+      "variant": "dashed"
+    },
+    {
+      "id": "worker-mongo",
+      "from": "worker",
+      "to": "mongo",
+      "label": "write"
+    },
+    {
+      "id": "worker-redis",
+      "from": "worker",
+      "to": "redis",
+      "label": "timelines · pub/sub"
+    },
+    {
+      "id": "redis-gateway",
+      "from": "redis",
+      "to": "gateway",
+      "label": "pub/sub"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Hybrid feed",
+      "items": [
+        "Post → job → worker pushes the id onto each follower's Redis timeline",
+        "Authors with huge followings skip the push; merged in at read time",
+        "Redis is a cache only: a lost timeline is rebuilt from MongoDB"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Realtime across instances",
+      "items": [
+        "Each socket joins user:<id>; any instance or the worker reaches it via Redis pub/sub",
+        "Sends go over REST (idempotent clientId); sockets only push"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust",
+      "items": [
+        "Every request verifies a Clerk JWT; per-IP and per-user rate limits in Redis",
+        "File bytes never touch the API: signed tickets, verified after upload"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Measured",
+      "items": [
+        "Every query served by an index in order (profiler test)",
+        "Post page: 8 MongoDB queries + 3 Redis commands, at any page size"
+      ]
+    }
+  ]
+}

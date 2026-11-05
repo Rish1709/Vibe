@@ -593,7 +593,7 @@ against them as two attackers: a stranger and an account the owner blocked.
   Without it, a typo in a path would 404 for everyone and the row would pass.
 - After the writes, the database is checked: text unchanged, no likes, no repost, no reply, message
   count unchanged, upload still unattached, follow request still pending. A response code alone can
-  lie (a 404 *after* the write happened).
+  lie (a 404 _after_ the write happened).
 - **Side doors are rows too:** replying to the private comment through the attacker's own public post
   (`parentId` from another post), quoting the private post, attaching someone else's upload to a new
   post or story.
@@ -630,7 +630,7 @@ are listed in the test, each with its reason: `$text` search (unordered by desig
 cached weekly aggregate) and who-to-follow (it ranks counts it just computed, which no index can hold).
 
 **It found three in-memory sorts, all in stories.** They were sorted by `createdAt` while the index was
-`{authorId, expiresAt}`. Every story expires exactly 24 hours after it's posted, so expiry order *is*
+`{authorId, expiresAt}`. Every story expires exactly 24 hours after it's posted, so expiry order _is_
 posting order:
 
 - A profile's stories now sort by `{expiresAt, _id}` on a `{authorId, expiresAt, _id}` index: read in
@@ -666,3 +666,60 @@ Of the 11 posts, 7 came from a private account, which trending ignores by design
 author with 4 posts, ranking 11th behind seeded tags used by two to four different people, one place
 outside the top 10. Ranking by distinct authors is the point: one account repeating a tag shouldn't be
 able to make it trend.
+
+## Delivery: Docker, CI/CD, load testing (Phase 10)
+
+### Images
+
+- **One multi-stage `Dockerfile`, three targets.** Dependencies install from manifests before any
+  source is copied, so a code change reuses the cached `npm ci`. The API image holds production
+  dependencies and compiled JavaScript only (no compilers, test tools or web packages), runs as the
+  non-root `node` user, and declares a liveness health check.
+- **The worker is the API image with another command.** They can't drift apart on models or job formats.
+- **Liveness, not readiness, in the container health check.** If MongoDB blips, a readiness-based check
+  would make the orchestrator restart healthy API processes, which helps nothing and drops sockets.
+- **The web image is unprivileged nginx** serving the build and proxying `/api` and `/socket.io`. The
+  browser sees one origin (no CORS preflights), `index.html` is never cached and fingerprinted assets
+  are cached forever. The API trusts exactly one proxy hop for client IPs (rate limits).
+- **Secrets never enter an image.** `.dockerignore` excludes every `.env`; settings arrive at run time
+  (`env_file`). The one build-time value, Clerk's publishable key, is public by design.
+- **The web build needed separating.** At first the API image also required the Clerk key, because both
+  went through one build stage. Now the server and web builds are separate stages.
+
+### CI/CD
+
+Every push and pull request runs dependency audit, formatting, lint, type checks, all tests (with a Redis
+service container) and the build, then builds both images. On `main` the images are published to GitHub
+Container Registry, tagged with the commit SHA (immutable, for rollbacks) and `latest`. A newer push
+cancels the run in progress, and permissions are read-only except where publishing needs package writes.
+The workflow refuses to publish a web image built with a placeholder key.
+
+### Load testing: what the numbers did and didn't say
+
+The load test runs the **compiled production server** in its own process against real MongoDB and Redis,
+with 2,000 users, 100,000 follows and 40,000 posts, and a traffic mix of feeds, profiles, posts, hashtags,
+trending and likes. Sign-in is real RS256 verification (Clerk's networkless mode with a generated key).
+
+**First result: about 30 requests per second, flat from 8 to 128 users.** Flat throughput with rising
+latency means a shared bottleneck, so I measured each suspect separately:
+
+- Token verification: 0.9 ms per request. Not it.
+- MongoDB in Docker Desktop on Windows: 4 ms per round trip from the host, and a hard cap of about 1,400
+  simple queries per second even from inside Docker's network (a native MongoDB does tens of thousands).
+  The laptop was also on battery, at 59% CPU before the test. **That's the cap, and it's the machine.**
+
+So raw throughput on this laptop says little about the app. What does carry over to any hardware is **how
+many round trips each request makes**, because that count multiplies whatever the latency is. The load test
+now measures it exactly, scoped to its own databases: the profiler for MongoDB, MONITOR for Redis
+(excluding commands inside Lua scripts, which are one round trip).
+
+That measurement found a real inefficiency: **a single post took 12 MongoDB queries, and 4 were
+duplicates.** The access check loaded the author and the viewer's relationship to them, then building the
+response loaded the same four things again. The same happened on profile post lists. Passing what the check
+already loaded into the response builder brought both to 8. A query-budget test now holds them there and
+checks that a page of 20 posts costs the same as a page of 1 (no N+1). Reverting the fix fails it at 12.
+
+A first, naive Redis count showed 815 commands per feed read. It was a counting artifact: a timeline
+rebuild is one Lua script of up to 800 writes, and Redis counts each command inside the script.
+**Interview takeaway: measure what you think you're measuring.** Server-wide counters included the
+dev worker's polling and commands inside Lua, and either would have sent the optimisation the wrong way.

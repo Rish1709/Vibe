@@ -42,6 +42,63 @@ services:
       timeout: 3s
       retries: 20
 
+  # --- The application, as it runs in production (profile "app": `npm run stack:up`) -------------
+  # Configuration comes from apps/api/.env at run time (never baked into an image); the variables
+  # below override only what differs inside the compose network.
+
+  api:
+    profiles: ['app']
+    build:
+      context: .
+      target: api
+    image: vibe-api:local
+    init: true # PID 1 that forwards SIGTERM and reaps zombies; the app's graceful shutdown does the rest
+    env_file: apps/api/.env
+    environment: &app-env
+      NODE_ENV: production
+      LOG_LEVEL: info
+      MONGODB_URI: mongodb://mongo:27017/vibe?directConnection=true
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: http://localhost:8080
+      CLERK_AUTHORIZED_PARTIES: http://localhost:8080
+      # One proxy hop (nginx): client IPs for rate limiting come from X-Forwarded-For.
+      TRUST_PROXY: '1'
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  worker:
+    profiles: ['app']
+    image: vibe-api:local # the API image, another entry point
+    init: true
+    command: ['node', '--enable-source-maps', 'apps/api/dist/worker.js']
+    env_file: apps/api/.env
+    environment: *app-env
+    healthcheck:
+      disable: true # no HTTP server; BullMQ re-queues the jobs of a worker that dies
+    depends_on:
+      api: { condition: service_started } # builds the shared image first
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  web:
+    profiles: ['app']
+    build:
+      context: .
+      target: web
+      args:
+        # Public by design (it ships in the browser bundle). Supplied by scripts/stack.js; the
+        # Dockerfile refuses to build without it, so other commands (logs, down) need not set it.
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+    image: vibe-web:local
+    ports:
+      - '8080:8080'
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
 volumes:
   mongo-data:
   redis-data:

@@ -160,4 +160,40 @@ describe('query plans', () => {
       .map(describeOp);
     expect([...new Set(offenders)]).toEqual([]);
   });
+
+  /**
+   * Query budgets. Round trips multiply network latency (about 4 ms each to MongoDB in Docker on
+   * Windows, measured by the load test), so the count per request matters as much as each plan.
+   * A page must cost the same whether it holds 1 post or 20 (no N+1), and a post must not re-read
+   * what its access check already loaded (that duplication was 4 of 12 queries).
+   */
+  it('keeps reads within a fixed query budget, whatever the page size', async () => {
+    const reader = await world.user('reader');
+    const author = await world.user('author');
+    await as(reader).put(`/users/${author.id}/follow`);
+    const first = await world.post(author, 'first');
+    const db = mongoose.connection.db!;
+
+    async function queriesFor(path: string): Promise<number> {
+      await db.command({ profile: 0 });
+      await db
+        .collection('system.profile')
+        .drop()
+        .catch(() => undefined);
+      await db.command({ profile: 2 });
+      try {
+        expect((await as(reader).get(path)).status).toBe(200);
+      } finally {
+        await db.command({ profile: 0 });
+      }
+      return db.collection('system.profile').countDocuments({ ns: { $not: /system\./ } });
+    }
+
+    expect(await queriesFor(`/posts/${first}`)).toBeLessThanOrEqual(8);
+    const onePost = await queriesFor(`/users/${author.id}/posts`);
+    expect(onePost).toBeLessThanOrEqual(8);
+
+    for (let i = 0; i < 19; i++) await world.post(author, `post ${i}`);
+    expect(await queriesFor(`/users/${author.id}/posts`)).toBe(onePost);
+  });
 });

@@ -22,7 +22,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d --wait mongo redis",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "stack:up": "node scripts/stack.js up",
+    "stack:down": "node scripts/stack.js down"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

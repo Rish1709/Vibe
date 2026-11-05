@@ -1,0 +1,16 @@
+# Keep the build context small and secret-free: the image is built from source and the lockfile only.
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.vite
+.git
+.github
+.claude
+docs
+*.md
+
+# Secrets never enter an image. Configuration is passed at run time (env_file in compose).
+**/.env
+**/.env.*
+!**/.env.example

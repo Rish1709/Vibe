@@ -22,7 +22,12 @@ export function useTestDatabase({ scope = 'test' }: { scope?: 'test' | 'file' } 
   beforeEach(async () => {
     if (scope === 'file') return;
     const collections = await mongoose.connection.db?.collections();
-    await Promise.all((collections ?? []).map((collection) => collection.deleteMany({})));
+    // system.* (e.g. the profiler's output) belongs to MongoDB and can't be written to.
+    await Promise.all(
+      (collections ?? [])
+        .filter((collection) => !collection.collectionName.startsWith('system.'))
+        .map((collection) => collection.deleteMany({})),
+    );
   });
 
   afterAll(async () => {

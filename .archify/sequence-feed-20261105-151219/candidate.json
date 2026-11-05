@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Vibe: publishing a post and reading the feed",
+    "output": ".archify/sequence-feed-20261105-151219/vibe-feed-sequence.html",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "participants": [
+    {
+      "id": "author",
+      "type": "external",
+      "label": "Author",
+      "sublabel": "web app"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API",
+      "sublabel": "post + feed services"
+    },
+    {
+      "id": "mongo",
+      "type": "database",
+      "label": "MongoDB",
+      "sublabel": "posts · follows"
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "BullMQ",
+      "sublabel": "feed-fanout"
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker",
+      "sublabel": "fan-out processor"
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "timelines (sorted sets)"
+    },
+    {
+      "id": "reader",
+      "type": "external",
+      "label": "Follower",
+      "sublabel": "web app"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 415,
+      "label": "Publish: write once, enqueue"
+    },
+    {
+      "from": 425,
+      "to": 575,
+      "label": "Fan-out, off the request path"
+    },
+    {
+      "from": 590,
+      "to": 875,
+      "label": "Read the feed"
+    }
+  ],
+  "messages": [
+    {
+      "id": "create",
+      "from": "author",
+      "to": "api",
+      "y": 175,
+      "label": "POST /posts",
+      "variant": "emphasis"
+    },
+    {
+      "id": "threshold",
+      "from": "api",
+      "to": "mongo",
+      "y": 205,
+      "label": "author's follower count",
+      "note": "At or above the celebrity threshold: fanoutSkipped is stored on the post, decided once"
+    },
+    {
+      "id": "insert",
+      "from": "api",
+      "to": "mongo",
+      "y": 290,
+      "label": "insert post",
+      "variant": "emphasis"
+    },
+    {
+      "id": "own",
+      "from": "api",
+      "to": "redis",
+      "y": 320,
+      "label": "add to own timeline"
+    },
+    {
+      "id": "enqueue",
+      "from": "api",
+      "to": "queue",
+      "y": 350,
+      "label": "enqueue fan-out job",
+      "variant": "dashed",
+      "note": "Skipped for celebrity posts; a queue failure is logged, never fails the post"
+    },
+    {
+      "id": "created",
+      "from": "api",
+      "to": "author",
+      "y": 405,
+      "label": "201 Created",
+      "variant": "return"
+    },
+    {
+      "id": "job",
+      "from": "queue",
+      "to": "worker",
+      "y": 440,
+      "label": "deliver job",
+      "variant": "dashed"
+    },
+    {
+      "id": "followers",
+      "from": "worker",
+      "to": "mongo",
+      "y": 470,
+      "label": "next 1,000 followers (keyset)"
+    },
+    {
+      "id": "push",
+      "from": "worker",
+      "to": "redis",
+      "y": 500,
+      "label": "add post id to their timelines",
+      "note": "Only timelines that exist (active readers); repeated per page of followers"
+    },
+    {
+      "id": "get-feed",
+      "from": "reader",
+      "to": "api",
+      "y": 605,
+      "label": "GET /feed",
+      "variant": "emphasis"
+    },
+    {
+      "id": "read-tl",
+      "from": "api",
+      "to": "redis",
+      "y": 635,
+      "label": "read timeline page",
+      "note": "No timeline: rebuild it once from MongoDB under a lock; Redis down: serve from MongoDB"
+    },
+    {
+      "id": "ids",
+      "from": "redis",
+      "to": "api",
+      "y": 705,
+      "label": "post ids + times",
+      "variant": "return"
+    },
+    {
+      "id": "celebs",
+      "from": "api",
+      "to": "mongo",
+      "y": 735,
+      "label": "celebrity posts (partial index)",
+      "note": "Merged with the timeline by time"
+    },
+    {
+      "id": "hydrate",
+      "from": "api",
+      "to": "mongo",
+      "y": 795,
+      "label": "load + hydrate the page",
+      "note": "Visibility re-checked: a stale id can never leak a post"
+    },
+    {
+      "id": "page",
+      "from": "api",
+      "to": "reader",
+      "y": 860,
+      "label": "posts + next cursor",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api",
+      "from": 175,
+      "to": 405,
+      "type": "backend"
+    },
+    {
+      "participant": "worker",
+      "from": 440,
+      "to": 530,
+      "type": "backend"
+    },
+    {
+      "participant": "api",
+      "from": 605,
+      "to": 860,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Why hybrid",
+      "items": [
+        "Pure pull: every feed read queries all followees' posts",
+        "Pure push: one celebrity post means millions of writes",
+        "Push for most authors, pull for the few with huge followings"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Cheap reads",
+      "items": [
+        "A cached feed page: 9 MongoDB queries + 13 Redis commands (load test)",
+        "Timelines expire after 7 days unused, so memory tracks active readers"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Correct when caches lie",
+      "items": [
+        "Follow-graph changes drop the timeline (versioned), next read rebuilds",
+        "Redis is never the only copy: every path falls back to MongoDB"
+      ]
+    }
+  ]
+}

@@ -39,6 +39,12 @@ export interface AuthorInfo {
   isPrivate: boolean;
 }
 
+/** The visibility policy's view of a user already in hand (no query). */
+export const toAuthorInfo = (user: SummarySource & { isPrivate: boolean }): AuthorInfo => ({
+  summary: toUserSummary(user),
+  isPrivate: user.isPrivate,
+});
+
 /** Like findUserSummaries, plus the privacy flag the visibility policy needs. */
 export async function findAuthors(ids: Iterable<string>): Promise<Map<string, AuthorInfo>> {
   const unique = [...new Set(ids)].map((id) => new Types.ObjectId(id));
@@ -47,12 +53,7 @@ export async function findAuthors(ids: Iterable<string>): Promise<Map<string, Au
     { _id: { $in: unique }, deletedAt: null, username: { $type: 'string' } },
     { ...SUMMARY_PROJECTION, isPrivate: 1 },
   ).lean<(SummarySource & { isPrivate: boolean })[]>();
-  return new Map(
-    users.map((user) => [
-      user._id.toHexString(),
-      { summary: toUserSummary(user), isPrivate: user.isPrivate },
-    ]),
-  );
+  return new Map(users.map((user) => [user._id.toHexString(), toAuthorInfo(user)]));
 }
 
 /** Loads an active, onboarded user or throws 404. */

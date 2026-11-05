@@ -1,0 +1,773 @@
+{
+  "schema_version": 1,
+  "diagram_type": "erd",
+  "meta": {
+    "title": "Vibe: MongoDB collections",
+    "locale": "en",
+    "output": ".archify/erd-vibe-20261105-151219/vibe-erd.html",
+    "quality_profile": "standard"
+  },
+  "layout": {
+    "mode": "grid",
+    "gapX": 72,
+    "gapY": 38
+  },
+  "entities": [
+    {
+      "id": "follows",
+      "label": "follows",
+      "tag": "accounts + graph",
+      "col": 0,
+      "row": 1,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "followerId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "followeeId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "status",
+          "type": "pending | active"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "blocks",
+      "label": "blocks",
+      "tag": "accounts + graph",
+      "col": 0,
+      "row": 2,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "blockerId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "blockedId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "users",
+      "label": "users",
+      "tag": "accounts + graph",
+      "col": 0,
+      "row": 0,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "clerkId",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "displayName",
+          "type": "string"
+        },
+        {
+          "name": "searchTokens",
+          "type": "string[]"
+        },
+        {
+          "name": "email",
+          "type": "string"
+        },
+        {
+          "name": "bio",
+          "type": "string"
+        },
+        {
+          "name": "website",
+          "type": "string"
+        },
+        {
+          "name": "avatarUrl",
+          "type": "string"
+        },
+        {
+          "name": "avatarMediaId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "media._id"
+        },
+        {
+          "name": "clerkImageUrl",
+          "type": "string"
+        },
+        {
+          "name": "isPrivate",
+          "type": "bool"
+        },
+        {
+          "name": "messagePolicy",
+          "type": "string"
+        },
+        {
+          "name": "counts",
+          "type": "object"
+        },
+        {
+          "name": "clerkUpdatedAt",
+          "type": "Date"
+        },
+        {
+          "name": "deletedAt",
+          "type": "Date"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        },
+        {
+          "name": "updatedAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "posts",
+      "label": "posts",
+      "tag": "content",
+      "col": 1,
+      "row": 0,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "authorId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "kind",
+          "type": "original|quote|repost"
+        },
+        {
+          "name": "text",
+          "type": "string"
+        },
+        {
+          "name": "hashtags",
+          "type": "string[]"
+        },
+        {
+          "name": "media",
+          "type": "array<media>"
+        },
+        {
+          "name": "sharedPostId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "posts._id"
+        },
+        {
+          "name": "counts",
+          "type": "object"
+        },
+        {
+          "name": "fanoutSkipped",
+          "type": "bool"
+        },
+        {
+          "name": "editedAt",
+          "type": "Date"
+        },
+        {
+          "name": "deletedAt",
+          "type": "Date"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        },
+        {
+          "name": "updatedAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "comments",
+      "label": "comments",
+      "tag": "content",
+      "col": 1,
+      "row": 1,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "postId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "posts._id"
+        },
+        {
+          "name": "authorId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "parentId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "comments._id"
+        },
+        {
+          "name": "text",
+          "type": "string"
+        },
+        {
+          "name": "counts",
+          "type": "object"
+        },
+        {
+          "name": "deletedAt",
+          "type": "Date"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        },
+        {
+          "name": "updatedAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "likes",
+      "label": "likes",
+      "tag": "content",
+      "col": 1,
+      "row": 2,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "postId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "posts._id"
+        },
+        {
+          "name": "userId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "bookmarks",
+      "label": "bookmarks",
+      "tag": "content",
+      "col": 1,
+      "row": 3,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "userId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "postId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "posts._id"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "label": "media",
+      "tag": "media + stories",
+      "col": 2,
+      "row": 0,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "ownerId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "purpose",
+          "type": "post|story|avatar"
+        },
+        {
+          "name": "kind",
+          "type": "image | video"
+        },
+        {
+          "name": "status",
+          "type": "enum (4 states)"
+        },
+        {
+          "name": "fileId",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "folder",
+          "type": "string"
+        },
+        {
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "name": "thumbnailUrl",
+          "type": "string"
+        },
+        {
+          "name": "mimeType",
+          "type": "string"
+        },
+        {
+          "name": "size",
+          "type": "number"
+        },
+        {
+          "name": "width",
+          "type": "number"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        },
+        {
+          "name": "attachedAt",
+          "type": "Date"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        },
+        {
+          "name": "updatedAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "stories",
+      "label": "stories",
+      "tag": "media + stories",
+      "col": 2,
+      "row": 1,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "authorId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "media",
+          "type": "object"
+        },
+        {
+          "name": "caption",
+          "type": "string"
+        },
+        {
+          "name": "expiresAt",
+          "type": "Date (TTL)"
+        },
+        {
+          "name": "viewCount",
+          "type": "number"
+        },
+        {
+          "name": "deletedAt",
+          "type": "Date"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "storyviews",
+      "label": "storyviews",
+      "tag": "media + stories",
+      "col": 2,
+      "row": 2,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "storyId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "stories._id"
+        },
+        {
+          "name": "viewerId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "expiresAt",
+          "type": "Date (TTL)"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "conversations",
+      "label": "conversations",
+      "tag": "messaging",
+      "col": 3,
+      "row": 0,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "key",
+          "type": "sorted id pair",
+          "key": "uk"
+        },
+        {
+          "name": "participants",
+          "type": "ObjectId[2]",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "members",
+          "type": "array<member>"
+        },
+        {
+          "name": "lastMessage",
+          "type": "object"
+        },
+        {
+          "name": "lastMessageAt",
+          "type": "Date"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        },
+        {
+          "name": "updatedAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "messages",
+      "label": "messages",
+      "tag": "messaging",
+      "col": 3,
+      "row": 1,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "conversationId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "conversations._id"
+        },
+        {
+          "name": "senderId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "text",
+          "type": "string"
+        },
+        {
+          "name": "clientId",
+          "type": "uuid (idempotency)"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date"
+        }
+      ]
+    },
+    {
+      "id": "notifications",
+      "label": "notifications",
+      "tag": "messaging",
+      "col": 3,
+      "row": 2,
+      "attributes": [
+        {
+          "name": "_id",
+          "type": "ObjectId",
+          "key": "pk"
+        },
+        {
+          "name": "recipientId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "actorId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "users._id"
+        },
+        {
+          "name": "type",
+          "type": "enum (6 kinds)"
+        },
+        {
+          "name": "postId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "posts._id"
+        },
+        {
+          "name": "commentId",
+          "type": "ObjectId",
+          "key": "fk",
+          "references": "comments._id"
+        },
+        {
+          "name": "dedupeKey",
+          "type": "string"
+        },
+        {
+          "name": "readAt",
+          "type": "Date"
+        },
+        {
+          "name": "createdAt",
+          "type": "Date (TTL 90 d)"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "follows-users-follower-followee",
+      "from": "follows",
+      "to": "users",
+      "label": "follower / followee",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "blocks-users-blocker-blocked",
+      "from": "blocks",
+      "to": "users",
+      "label": "blocker / blocked",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "posts-users-author",
+      "from": "posts",
+      "to": "users",
+      "label": "author",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "comments-posts-on",
+      "from": "comments",
+      "to": "posts",
+      "label": "on",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "likes-posts-liked",
+      "from": "likes",
+      "to": "posts",
+      "label": "liked",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "bookmarks-posts-saved",
+      "from": "bookmarks",
+      "to": "posts",
+      "label": "saved",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "media-users-owner",
+      "from": "media",
+      "to": "users",
+      "label": "owner",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "stories-users-author",
+      "from": "stories",
+      "to": "users",
+      "label": "author",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "storyviews-stories-viewed",
+      "from": "storyviews",
+      "to": "stories",
+      "label": "viewed",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "messages-conversations-in",
+      "from": "messages",
+      "to": "conversations",
+      "label": "in",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "notifications-users-recipient",
+      "from": "notifications",
+      "to": "users",
+      "label": "recipient",
+      "fromCardinality": "many",
+      "toCardinality": "one"
+    },
+    {
+      "id": "notifications-posts-about",
+      "from": "notifications",
+      "to": "posts",
+      "label": "about",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "toOptional": true
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Edges are documents",
+      "items": [
+        "A follow, like, bookmark or block is one small document",
+        "A unique index on the pair stops duplicates under races",
+        "No unbounded arrays inside users"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Denormalized on purpose",
+      "items": [
+        "counts: followers/following/posts on users, likes/comments/reposts on posts, $inc + daily reconcile",
+        "Media embedded in posts and stories (read together, at most 4)",
+        "conversations.members holds unread count and lastReadAt per participant"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Deletes and expiry",
+      "items": [
+        "Soft delete (deletedAt) where others point; a background cascade purges",
+        "Stories expire in queries (expiresAt > now); TTL indexes collect garbage",
+        "media.status: pending > ready > attached, or released for cleanup"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Self-references",
+      "items": [
+        "posts.sharedPostId points at another post: a quote or a plain repost",
+        "comments.parentId points at a top-level comment: replies are one level deep"
+      ]
+    }
+  ]
+}

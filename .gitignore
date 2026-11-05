@@ -18,3 +18,9 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Archify: keep each diagram's page and source (candidate.json); check receipts and screenshots regenerate
+.archify/**/*.json
+!.archify/**/candidate.json
+.archify/**/review-*/
+.archify/**/visual-check*/

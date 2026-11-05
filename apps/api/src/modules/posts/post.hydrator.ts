@@ -3,8 +3,8 @@ import { Types } from 'mongoose';
 import { canReshare, canViewContent } from '../../policies/visibility.js';
 import { BookmarkModel, LikeModel } from '../engagement/engagement.models.js';
 import { toMediaDto } from '../media/media.service.js';
-import { getRelationships } from '../relationships/relationship.service.js';
-import { findAuthors } from '../users/user.queries.js';
+import { getRelationships, type Relationship } from '../relationships/relationship.service.js';
+import { findAuthors, type AuthorInfo } from '../users/user.queries.js';
 import { PostModel, type PostRecord } from './post.model.js';
 
 const hex = (id: Types.ObjectId) => id.toHexString();
@@ -18,7 +18,21 @@ const nonNegative = (value: number) => Math.max(0, value);
  * in Phase 5) can never leak a post whose author has since gone private, blocked the viewer, or
  * been deleted. Posts that fail the check are dropped; unavailable shared posts are flagged.
  */
-export async function hydratePosts(viewerId: string, posts: PostRecord[]): Promise<PostDto[]> {
+/**
+ * An author the caller already loaded and checked (e.g. the access check before a single post or a
+ * profile's posts). Reusing it saves re-reading the same user and relationship: 4 of 12 queries.
+ */
+export interface KnownAuthor {
+  id: string;
+  author: AuthorInfo;
+  relationship: Relationship;
+}
+
+export async function hydratePosts(
+  viewerId: string,
+  posts: PostRecord[],
+  known: KnownAuthor[] = [],
+): Promise<PostDto[]> {
   if (posts.length === 0) return [];
   const viewer = new Types.ObjectId(viewerId);
 
@@ -29,11 +43,17 @@ export async function hydratePosts(viewerId: string, posts: PostRecord[]): Promi
   const sharedById = new Map(shared.map((post) => [hex(post._id), post]));
 
   const all = [...posts, ...shared];
-  const authorIds = all.map((post) => hex(post.authorId));
-  const [authors, relationships] = await Promise.all([
-    findAuthors(authorIds),
-    getRelationships(viewerId, authorIds),
-  ]);
+  const knownIds = new Set(known.map((entry) => entry.id));
+  const missing = [...new Set(all.map((post) => hex(post.authorId)))].filter(
+    (id) => !knownIds.has(id),
+  );
+  const [authors, relationships] = missing.length
+    ? await Promise.all([findAuthors(missing), getRelationships(viewerId, missing)])
+    : [new Map<string, AuthorInfo>(), new Map<string, Relationship>()];
+  for (const entry of known) {
+    authors.set(entry.id, entry.author);
+    relationships.set(entry.id, entry.relationship);
+  }
 
   /** The author's summary if the viewer may see this post, otherwise null. */
   const visibleAuthor = (post: PostRecord): UserSummaryDto | null => {
