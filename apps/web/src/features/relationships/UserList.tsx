@@ -14,9 +14,12 @@ import { FollowButton } from './FollowButton';
 export function UserRow({
   user,
   action,
+  note,
 }: {
   user: UserListItemDto & { isPrivate?: boolean };
   action?: ReactNode;
+  /** A line of context under the handle, e.g. why the account is suggested. */
+  note?: string | undefined;
 }) {
   return (
     <li className="flex items-center gap-3 px-4 py-3">
@@ -30,6 +33,7 @@ export function UserRow({
             )}
           </span>
           <span className="block truncate text-sm text-muted">@{user.username}</span>
+          {note && <span className="block truncate text-xs text-muted">{note}</span>}
         </span>
       </Link>
       {action}

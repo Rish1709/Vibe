@@ -27,10 +27,13 @@ docs/            Architecture and engineering documentation
 npm install
 cp apps/api/.env.example apps/api/.env          # then set CLERK_SECRET_KEY
 cp apps/web/.env.example apps/web/.env.local    # then set VITE_CLERK_PUBLISHABLE_KEY
-npm run infra:up        # MongoDB (replica set) + Redis, waits until healthy
-npm run dev:api         # http://localhost:4000
-npm run dev:web         # http://localhost:5173 (proxies /api to the API)
+npm run dev             # databases, API, worker and web app together; Ctrl+C stops them
 ```
+
+Then open http://localhost:5173. `npm run dev` starts MongoDB and Redis in Docker (Docker Desktop must be
+running), then the API (port 4000), the background worker and the web app (port 5173), with each output
+line labelled. To run a piece on its own: `npm run infra:up`, `npm run dev:api`, `npm run dev:worker`,
+`npm run dev:web`. `npm run infra:down` stops the databases (data is kept).
 
 Check the API: `curl http://localhost:4000/health/ready`
 
@@ -81,6 +84,6 @@ delete stale unix-socket files; the script moves them aside and starts Docker.
 5. Feed architecture, indexing, Redis caching ✅
 6. Stories and media ✅
 7. Real-time messaging and notifications ✅
-8. Search and discovery
+8. Search and discovery ✅
 9. Testing, performance and security review
 10. Docker, CI/CD, documentation

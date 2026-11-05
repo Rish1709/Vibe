@@ -12,4 +12,8 @@ export const CacheKeys = {
   timelineRebuildLock: (userId: string) => `v1:feed:lock:${userId}`,
   /** The viewer's followees, split into fanned-out authors and pulled-at-read celebrities. */
   feedAuthors: (userId: string) => `v1:feed:authors:${userId}`,
+  /** Explore's trending hashtags: one list for everyone. */
+  trendingHashtags: () => 'v1:explore:trending',
+  /** Follow-suggestion candidates for a viewer (filtered live on read). */
+  followSuggestions: (userId: string) => `v1:explore:suggest:${userId}`,
 };

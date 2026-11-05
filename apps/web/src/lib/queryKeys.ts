@@ -13,6 +13,9 @@ export const queryKeys = {
   userPosts: (userId: string) => ['posts', 'user', userId] as const,
   bookmarks: ['posts', 'bookmarks'] as const,
   feed: ['posts', 'feed'] as const,
+  // Under ['posts'] too, so a like in search results or on a hashtag page patches every copy.
+  postSearch: (q: string) => ['posts', 'search', q] as const,
+  hashtagPosts: (tag: string) => ['posts', 'hashtag', tag] as const,
 
   comments: (postId: string) => ['comments', postId] as const,
   replies: (commentId: string) => ['replies', commentId] as const,
@@ -31,4 +34,6 @@ export const queryKeys = {
   messages: (conversationId: string) => ['messages', conversationId] as const,
   notifications: ['notifications'] as const,
   unreadCounts: ['unread-counts'] as const,
+  trending: ['explore', 'trending'] as const,
+  suggestions: ['explore', 'suggestions'] as const,
 };

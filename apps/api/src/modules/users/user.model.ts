@@ -58,6 +58,11 @@ userSchema.index({ clerkId: 1 }, { unique: true });
 // implies a string. Every profile lookup became a COLLSCAN (found with explain() on seeded data).
 userSchema.index({ username: 1 }, { unique: true, sparse: true });
 
+// "Popular accounts" for follow suggestions. Partial: only active, onboarded accounts are suggested.
+userSchema.index(
+  { 'counts.followers': -1, _id: 1 },
+  { partialFilterExpression: { deletedAt: null, username: { $type: 'string' } } },
+);
 // Multikey index: one entry per name word, so '^hop' finds 'Grace Hopper' with a range scan.
 userSchema.index({ searchTokens: 1 });
 

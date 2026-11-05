@@ -99,7 +99,7 @@ export function useFollowUser() {
         })
       ).data,
     onSuccess: () => {
-      for (const prefix of ['followers', 'following', 'likers', 'profile', 'search']) {
+      for (const prefix of ['followers', 'following', 'likers', 'profile', 'search', 'explore']) {
         void queryClient.invalidateQueries({ queryKey: [prefix] });
       }
       void queryClient.invalidateQueries({ queryKey: queryKeys.me });

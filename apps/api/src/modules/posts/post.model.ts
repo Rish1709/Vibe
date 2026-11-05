@@ -79,6 +79,14 @@ postSchema.index(
 );
 // "Did the viewer repost these?" batch lookups and repost counts.
 postSchema.index({ sharedPostId: 1, kind: 1 });
+// Post search. Language "none": every word is indexed as written (lowercased), in any language.
+// English mode was measured and rejected: it drops stop words from the index, so a search for
+// "the park" (every word required) matched nothing. The cost is no stemming: "run" won't find
+// "running". The language field is renamed so a future `language` attribute can't change indexing.
+postSchema.index(
+  { text: 'text' },
+  { name: 'post_text', default_language: 'none', language_override: 'textLanguage' },
+);
 
 type PostSchemaFields = InferSchemaType<typeof postSchema>;
 

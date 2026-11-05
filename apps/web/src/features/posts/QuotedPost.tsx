@@ -21,7 +21,7 @@ export function QuotedPost({ post }: { post: PostDto }) {
       </div>
       {post.text && (
         <div className="mt-1 line-clamp-4">
-          <PostText text={post.text} />
+          <PostText text={post.text} linkify={false} />
         </div>
       )}
       <PostMedia media={post.media.slice(0, 1)} />

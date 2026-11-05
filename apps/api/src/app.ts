@@ -36,6 +36,8 @@ import { createBlockService } from './modules/relationships/block.service.js';
 import { createRelationshipRouter } from './modules/relationships/relationship.routes.js';
 import { createSearchRouter } from './modules/search/search.routes.js';
 import { createSearchService } from './modules/search/search.service.js';
+import { createExploreRouter, createHashtagRouter } from './modules/discovery/discovery.routes.js';
+import { createDiscoveryService } from './modules/discovery/discovery.service.js';
 import { createFollowService } from './modules/relationships/follow.service.js';
 import { createUserRouter } from './modules/users/user.routes.js';
 import type { MaintenanceQueue } from './modules/maintenance/maintenance.queue.js';
@@ -243,7 +245,13 @@ export function createApp({
   api.use('/stories', storyRouter);
   api.use('/users', userStoriesRouter);
   api.use('/media', createMediaRouter({ media, auth, limiter }));
-  api.use('/search', createSearchRouter({ search: createSearchService(), auth, limiter }));
+  const discovery = createDiscoveryService({ redis, logger });
+  api.use(
+    '/search',
+    createSearchRouter({ search: createSearchService(), discovery, auth, limiter }),
+  );
+  api.use('/hashtags', createHashtagRouter({ discovery, auth }));
+  api.use('/explore', createExploreRouter({ discovery, auth }));
   api.use('/conversations', createMessageRouter({ messages, auth, limiter }));
   api.use('/notifications', createNotificationRouter({ notifications, messages, auth }));
   app.use('/api/v1', api);

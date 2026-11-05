@@ -21,7 +21,7 @@ export interface NavItem {
 export function navItems(username: string): NavItem[] {
   return [
     { to: '/', label: 'Home', icon: HomeIcon },
-    { to: '/search', label: 'Search', icon: SearchIcon },
+    { to: '/explore', label: 'Explore', icon: SearchIcon },
     { to: '/notifications', label: 'Notifications', icon: BellIcon, badge: 'notifications' },
     { to: '/messages', label: 'Messages', icon: MessageIcon, badge: 'messages' },
     { to: `/${username}`, label: 'Profile', icon: UserIcon },

@@ -55,7 +55,7 @@ export default defineConfig(
 
   {
     // Command-line scripts (seeding, maintenance) report progress on stdout by design.
-    files: ['apps/*/scripts/**/*.ts'],
+    files: ['apps/*/scripts/**/*.ts', 'scripts/**/*.js'],
     rules: { 'no-console': 'off' },
   },
 

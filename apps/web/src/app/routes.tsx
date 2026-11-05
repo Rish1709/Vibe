@@ -7,6 +7,8 @@ import { HomePage } from '@/features/feed/HomePage';
 import { OnboardingPage } from '@/features/onboarding/OnboardingPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 import { SearchPage } from '@/features/search/SearchPage';
+import { ExplorePage } from '@/features/discovery/ExplorePage';
+import { HashtagPage } from '@/features/discovery/HashtagPage';
 import { ConversationPage } from '@/features/messages/ConversationPage';
 import { MessagesPage } from '@/features/messages/MessagesPage';
 import { NotificationsPage } from '@/features/notifications/NotificationsPage';
@@ -37,6 +39,8 @@ export const appRoutes: RouteObject[] = [
               { path: 'settings', element: <SettingsPage /> },
               { path: 'bookmarks', element: <BookmarksPage /> },
               { path: 'search', element: <SearchPage /> },
+              { path: 'explore', element: <ExplorePage /> },
+              { path: 'hashtag/:tag', element: <HashtagPage /> },
               { path: 'messages', element: <MessagesPage /> },
               { path: 'messages/:conversationId', element: <ConversationPage /> },
               { path: 'notifications', element: <NotificationsPage /> },

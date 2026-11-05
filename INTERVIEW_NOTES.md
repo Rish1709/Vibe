@@ -506,3 +506,74 @@ count. Notifications must never fail the action that caused them: an enqueue err
 - No notification grouping ("Ada and 5 others liked your post").
 - Pushes aren't queued for offline users; reconnect-and-refetch covers the web app. Mobile push would add
   a per-device delivery queue.
+
+## Search and discovery (Phase 8)
+
+### Post search: MongoDB `$text`, measured before trusting
+
+`GET /search/posts?q=` finds posts containing **every** word, newest first, with keyset pagination. Each
+word becomes a quoted phrase, and `$text` ANDs multiple phrases. User input can't inject `$text` syntax:
+quotes and the leading `-` (negation) are stripped first. A lone `#tag` is routed to the hashtag index.
+
+The index language was chosen by experiment against real MongoDB, not by default:
+
+| Query                | `english` index                                                          | `none` index    |
+| -------------------- | ------------------------------------------------------------------------ | --------------- |
+| "running park" (AND) | correct                                                                  | correct         |
+| "run"                | also finds "running" (stemming)                                          | exact word only |
+| "the park"           | **nothing**: stop words aren't indexed, and the phrase "the" can't match | correct         |
+
+Found later on live data: phrases are verified as substrings, so once one word matches a whole word, the
+others can match inside longer words ("ipsa statua" also found "ipsam ... statua"). Harmless, close to
+prefix matching, and now documented rather than claimed away.
+
+A search box where "the park" returns nothing is a bug users would hit daily, so the index uses
+`none`: every word indexed as written, in any language, no stemming. The trade-off is written next to
+the index definition. Changing a text index's options means dropping and rebuilding it, which
+`db:sync-indexes` does as an explicit deploy step (the dev database needed exactly that).
+
+**Cost, honestly.** `$text` can't return matches in date order, so MongoDB collects every match and
+sorts them: O(matches) per page. Fine at this size; a common word over millions of posts isn't. The
+upgrade path is a search engine (Atlas Search or OpenSearch) fed by change streams, which also brings
+relevance ranking, typo tolerance and prefix search.
+
+**Visibility** is re-checked by the same hydration as every list, so private posts appear only to
+approved followers, and deleted posts and plain reposts never appear.
+
+### Hashtag pages
+
+`GET /hashtags/:tag/posts` uses the `{hashtags, createdAt, _id}` index planned back in Phase 4: an index
+range scan, already in date order (explain shows no SORT stage). Tags are case-insensitive (`#Vibe`,
+`vibe` and `VIBE` are one page). Hashtags and @mentions in posts are now links, except inside a quoted
+post, which is itself a link (links can't nest).
+
+### Trending hashtags
+
+- **Ranked by distinct authors, then posts.** One account posting `#deal` a hundred times counts as one
+  author; three people using `#worldcup` once each outrank it. Tested, and mutation-checked.
+- **Private accounts are excluded.** Their hashtags would otherwise leak onto everyone's Explore page
+  (think `#surpriseparty`). Also mutation-checked.
+- **The window uses the `_id` index.** An ObjectId starts with its creation time, so
+  `_id >= ObjectId(now - 7 days)` is an index range over recent posts, with no `createdAt` index. The
+  `createdAt` condition is still applied, for documents whose ids don't match their dates (imports,
+  backdated seed data).
+- **Cached for 5 minutes** (cache-aside): everyone sees the same list, and trends move slowly.
+- The window is a week because the network is young; a busy network would use hours and add time decay.
+
+### Who to follow
+
+- **Friends of friends:** accounts followed by the people you follow, ranked by how many of them do
+  ("Followed by 2 people you follow"). Seeded from at most 200 of your most recent followees, so a
+  user who follows 10,000 accounts doesn't run an unbounded aggregation.
+- **Popular accounts** fill the list for newcomers who follow nobody, via a partial index on
+  `counts.followers` that holds only active, onboarded accounts.
+- **Cache the expensive part, filter the volatile part live.** The candidate list is cached per user
+  for 10 minutes; follows, pending requests and blocks are checked on every read. So someone you just
+  followed disappears from suggestions at once, without invalidating anything.
+
+### A regression caught by an existing test
+
+Splitting search into People and Posts tabs moved the debounce into a child component that mounts on
+the first keystroke. A debounce starts from its initial value, so "p" was searched immediately instead
+of waiting for "priv". The Phase 6 search test (which asserts exactly one request) failed, and the fix
+was to debounce once, at the page, which is always mounted.

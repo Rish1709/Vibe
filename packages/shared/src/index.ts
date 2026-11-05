@@ -7,3 +7,4 @@ export * from './users.js';
 export * from './messages.js';
 export * from './notifications.js';
 export * from './realtime.js';
+export * from './discovery.js';

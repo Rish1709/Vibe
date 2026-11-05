@@ -20,6 +20,7 @@ export const RESERVED_USERNAMES: ReadonlySet<string> = new Set([
   'bookmarks',
   'explore',
   'feed',
+  'hashtag',
   'help',
   'home',
   'login',
@@ -42,7 +43,9 @@ export const RESERVED_USERNAMES: ReadonlySet<string> = new Set([
   'stories',
   'support',
   'system',
+  'tags',
   'terms',
+  'trending',
   'vibe',
   'www',
 ]);

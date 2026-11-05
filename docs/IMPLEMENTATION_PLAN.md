@@ -130,6 +130,20 @@ atomic claim.
 Mutation-checked: the notification re-check after insert, the reconciler's quiet rule, side-effect-free
 send retries.
 
-## Phases 8–10
+## Phase 8: Search and discovery
+
+- [x] Post search: `$text` with every word required, operator-safe input, keyset by recency; index
+      language chosen by measurement ("none": English mode broke "the park")
+- [x] Hashtag pages on the existing { hashtags, createdAt, _id } index; hashtags and mentions linked
+- [x] Trending hashtags: distinct-author ranking, private accounts excluded, `_id`-range window,
+      5-minute cache
+- [x] Who to follow: friends of friends (bounded seed), popular-account fallback (partial index),
+      cached candidates filtered live
+- [x] Frontend: Explore page, People / Posts search tabs, hashtag page
+- [ ] Live check in the browser
+
+User search was pulled forward into Phase 6. Mutation-checked: trending's author ranking and privacy filter.
+
+## Phases 9–10
 
 See the roadmap in `README.md`.
