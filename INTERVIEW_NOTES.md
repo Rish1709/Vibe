@@ -577,3 +577,92 @@ Splitting search into People and Posts tabs moved the debounce into a child comp
 the first keystroke. A debounce starts from its initial value, so "p" was searched immediately instead
 of waiting for "priv". The Phase 6 search test (which asserts exactly one request) failed, and the fix
 was to debounce once, at the page, which is always mounted.
+
+## Hardening: security, performance, failure UX (Phase 9)
+
+### Authorization as an executable matrix
+
+Per-feature tests already checked "can't edit someone else's post". The gap is the endpoint nobody
+thought to test. `authorization.test.ts` sets up one private account with a post, a comment, a story, a
+conversation, an unused upload and a pending follow request, then tries **every** read and write route
+against them as two attackers: a stranger and an account the owner blocked.
+
+- Every row must be refused with 403 or 404 (400 only where the input itself is the problem). A 2xx
+  fails the test, and so does a 5xx, which would be a crash rather than a refusal.
+- **A positive control runs first:** an approved follower reads the same URLs and must get 200.
+  Without it, a typo in a path would 404 for everyone and the row would pass.
+- After the writes, the database is checked: text unchanged, no likes, no repost, no reply, message
+  count unchanged, upload still unattached, follow request still pending. A response code alone can
+  lie (a 404 *after* the write happened).
+- **Side doors are rows too:** replying to the private comment through the attacker's own public post
+  (`parentId` from another post), quoting the private post, attaching someone else's upload to a new
+  post or story.
+- Search, hashtag pages and trending must not surface the private post either.
+
+**Mutation-checked:** removing the author check on edit, the same-post check on replies, or the owner
+check on media each makes the matrix fail. These guards already existed. The matrix makes sure they
+can't be lost in a refactor.
+
+Other review results:
+
+- **Dependencies:** `npm audit --omit=dev` finds 0 vulnerabilities in what ships. The 10 dev-only
+  findings are one `minimatch` ReDoS inside eslint. Lint only reads our own files, and the offered
+  fix is a major downgrade, so it's accepted and recorded here.
+- **WebSockets:** Socket.IO's CORS setting doesn't apply to WebSocket upgrades. Cross-site WebSocket
+  hijacking still isn't possible, because the socket authenticates with a token in the handshake,
+  not with a cookie the browser would attach automatically.
+- **Inputs:** every route parses params, query and body through zod (`validated()`); handlers never
+  read raw `req.query` or `req.body`, so operator injection (`{"$gt": ""}`) has nowhere to land.
+
+### Query plans, measured by the profiler
+
+Indexes were designed per feature, but a design is a claim. `queryPlans.test.ts` turns on MongoDB's
+profiler, drives a tour of the app through the real API (follows and requests, posts with media,
+likes, reposts, quotes, comments and replies, feed, stories, hashtags, search, suggestions, messages,
+notifications, deletes), and fails on any query that:
+
+- **scans a collection** (`COLLSCAN`): cost grows with the whole collection, not the result; or
+- **sorts in memory** (`hasSortStage`): every match is held and sorted before the first row is
+  returned, and MongoDB aborts past 100 MB.
+
+Neither shows up at test sizes, which is why it's checked by plan rather than by timing. Exceptions
+are listed in the test, each with its reason: `$text` search (unordered by design), trending (a
+cached weekly aggregate) and who-to-follow (it ranks counts it just computed, which no index can hold).
+
+**It found three in-memory sorts, all in stories.** They were sorted by `createdAt` while the index was
+`{authorId, expiresAt}`. Every story expires exactly 24 hours after it's posted, so expiry order *is*
+posting order:
+
+- A profile's stories now sort by `{expiresAt, _id}` on a `{authorId, expiresAt, _id}` index: read in
+  index order, no sort. Reverting the sort makes the test fail again (mutation-checked).
+- The tray returns every active story of everyone you follow, with no page, so it's sorted in the API.
+  That costs the same as sorting in MongoDB, and doesn't depend on the planner choosing the compound
+  index for an `$in` (with tiny data it chose the expiry-only index instead).
+
+Changing an index's key means a rebuild; `db:sync-indexes` dropped the old one on the dev database.
+
+**Not done: load testing.** Throughput numbers from a laptop running Mongo, Redis, the API and the
+browser at once would be fiction. Load tests belong against the deployed stack in Phase 10.
+
+### A button that spins forever (found by the user)
+
+Edit and delete hung on a bad connection with no server logs. The API logs every request and times out
+at 15 s, so "no logs" meant the request never left the browser. Two client-side causes:
+
+- **React Query pauses requests while the browser reports being offline** (`networkMode: 'online'`,
+  the default). The mutation stays "pending" and never sends. Now `networkMode: 'always'`: send
+  anyway, and let a failure show as an error with a retry. `navigator.onLine` is also unreliable (it
+  reports "online" on Wi-Fi with no internet), so it's a poor gate.
+- **No deadline on the call.** Getting a Clerk token and the fetch itself could both wait forever. One
+  20 s deadline now covers token, request and response body. It's longer than the server's 15 s so a
+  slow server answers with its own 503 first. A cancel by the caller is still reported as a cancel.
+
+Tested with a fetch that never answers and a token that never arrives (both fail without the
+deadline). Delete also gained the error toast it was missing.
+
+### Why #jaihind didn't trend (not a bug)
+
+Of the 11 posts, 7 came from a private account, which trending ignores by design. That left one public
+author with 4 posts, ranking 11th behind seeded tags used by two to four different people, one place
+outside the top 10. Ranking by distinct authors is the point: one account repeating a tag shouldn't be
+able to make it trend.

@@ -80,6 +80,8 @@ export function useDeletePost() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.me });
       toast.success('Post deleted');
     },
+    onError: (err) =>
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete the post'),
   });
 }
 

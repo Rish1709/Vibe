@@ -32,8 +32,9 @@ const storySchema = new Schema(
 
 // Physical cleanup once expired. expireAfterSeconds 0 = delete at (or shortly after) expiresAt.
 storySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-// The tray: equality on author ($in over followees), range on expiresAt (ESR: equality, then range).
-storySchema.index({ authorId: 1, expiresAt: 1 });
+// The tray and a profile's stories: equality on author ($in over followees), then expiresAt as both the
+// range and the sort, with _id as the tie-breaker, so results stream in index order (a merge for $in).
+storySchema.index({ authorId: 1, expiresAt: 1, _id: 1 });
 
 const storyViewSchema = new Schema(
   {

@@ -28,6 +28,12 @@ const STORY_TTL_MS = STORY_TTL_HOURS * 3600 * 1000;
 
 /** Active = not deleted and not expired, checked at query time (never trusting TTL deletion). */
 const active = (now: Date) => ({ deletedAt: null, expiresAt: { $gt: now } });
+/**
+ * Oldest first. Every story expires exactly STORY_TTL_MS after it's posted, so expiry order is posting
+ * order, and sorting by expiresAt reads the { authorId, expiresAt, _id } index in order instead of
+ * sorting in memory (caught by the query-plan test).
+ */
+const PLAYBACK_ORDER = { expiresAt: 1, _id: 1 } as const;
 
 interface PageInput {
   cursor?: string | undefined;
@@ -111,9 +117,17 @@ export function createStoryService({ media }: { media: MediaService }) {
         new Types.ObjectId(viewer.id),
         ...follows.map((follow) => follow.followeeId),
       ];
-      const stories = await StoryModel.find({ authorId: { $in: authorIds }, ...active(new Date()) })
-        .sort({ createdAt: 1, _id: 1 })
-        .lean<StoryRecord[]>();
+      // Every active story of these authors is returned (there's no page), so sorting here costs the
+      // same as in MongoDB, and doesn't depend on the planner choosing the compound index for an $in.
+      const stories = (
+        await StoryModel.find({ authorId: { $in: authorIds }, ...active(new Date()) }).lean<
+          StoryRecord[]
+        >()
+      ).sort(
+        (a, b) =>
+          a.expiresAt.getTime() - b.expiresAt.getTime() ||
+          a._id.toHexString().localeCompare(b._id.toHexString()),
+      );
       if (stories.length === 0) return [];
 
       const ids = [...new Set(stories.map((story) => story.authorId.toHexString()))];
@@ -158,7 +172,7 @@ export function createStoryService({ media }: { media: MediaService }) {
       if (!canSeeProfile(rel)) throw Errors.notFound('User not found');
       if (!canViewContent(rel, author)) throw Errors.forbidden('This account is private');
       const stories = await StoryModel.find({ authorId: author._id, ...active(new Date()) })
-        .sort({ createdAt: 1, _id: 1 })
+        .sort(PLAYBACK_ORDER)
         .lean<StoryRecord[]>();
       const seen = await seenSet(
         viewer.id,

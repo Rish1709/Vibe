@@ -5,8 +5,12 @@ import { afterAll, beforeAll, beforeEach, inject } from 'vitest';
 import { connectMongo, disconnectMongo } from '../../src/infra/mongo.js';
 import { silentLogger } from './testApp.js';
 
-/** Connects this test file to its own database on the shared replica set and builds indexes. */
-export function useTestDatabase(): void {
+/**
+ * Connects this test file to its own database on the shared replica set and builds indexes.
+ * By default every test starts empty; `scope: 'file'` keeps data across the file's tests, for suites
+ * that build one expensive fixture in `beforeAll` and only read or attempt changes afterwards.
+ */
+export function useTestDatabase({ scope = 'test' }: { scope?: 'test' | 'file' } = {}): void {
   beforeAll(async () => {
     const uri = new URL(inject('mongoUri'));
     uri.pathname = `/test_${randomUUID().slice(0, 8)}`;
@@ -16,6 +20,7 @@ export function useTestDatabase(): void {
   });
 
   beforeEach(async () => {
+    if (scope === 'file') return;
     const collections = await mongoose.connection.db?.collections();
     await Promise.all((collections ?? []).map((collection) => collection.deleteMany({})));
   });

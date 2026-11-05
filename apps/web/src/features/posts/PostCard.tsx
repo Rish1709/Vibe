@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { Menu, type MenuItem } from '@/components/ui/Menu';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useMe } from '@/features/account/api';
+import { ApiError } from '@/lib/apiClient';
 import { fullDate, timeAgo } from '@/lib/time';
 import { useDeletePost, useTogglePost, useUpdatePost } from './api';
 import { PostComposer } from './PostComposer';
@@ -88,7 +89,11 @@ function EditForm({ post, onDone }: { post: PostDto; onDone: () => void }) {
           onClick={() =>
             update.mutate(
               { id: post.id, text: text.trim() },
-              { onSuccess: onDone, onError: () => toast.error('Could not save your edit') },
+              {
+                onSuccess: onDone,
+                onError: (err) =>
+                  toast.error(err instanceof ApiError ? err.message : 'Could not save your edit'),
+              },
             )
           }
         >

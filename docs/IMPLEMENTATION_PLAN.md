@@ -140,10 +140,25 @@ send retries.
 - [x] Who to follow: friends of friends (bounded seed), popular-account fallback (partial index),
       cached candidates filtered live
 - [x] Frontend: Explore page, People / Posts search tabs, hashtag page
-- [ ] Live check in the browser
+- [x] Live check in the browser
 
 User search was pulled forward into Phase 6. Mutation-checked: trending's author ranking and privacy filter.
 
-## Phases 9–10
+## Phase 9: Testing, performance and security review
+
+- [x] Authorization matrix: every read and write route tried by a stranger and a blocked account
+      against a private account's data; positive control; database checked afterwards
+- [x] Side doors covered: replies via another post, quotes, someone else's upload, follow requests
+- [x] Dependency audit: 0 production vulnerabilities; dev-only eslint finding recorded
+- [x] Query-plan test: profiler over a tour of the app, no COLLSCAN or in-memory sort outside
+      documented exceptions
+- [x] Fixed: stories sorted in memory (index now `{authorId, expiresAt, _id}`)
+- [x] Fixed: requests that could hang forever (offline pause, no deadline on token or fetch)
+- [ ] Load testing: deferred to Phase 10, against the deployed stack
+
+Mutation-checked: three authorization guards (edit ownership, reply parent, media owner), the story
+sort, and the client deadline.
+
+## Phase 10
 
 See the roadmap in `README.md`.
