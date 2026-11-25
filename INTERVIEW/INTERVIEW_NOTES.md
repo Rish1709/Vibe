@@ -232,7 +232,7 @@ version).
 
 ## Home feed (Phase 5)
 
-Full design and trade-off table: [docs/caching-strategy.md](docs/caching-strategy.md).
+Full design and trade-off table: [caching-strategy.md](caching-strategy.md).
 
 ### The design in one paragraph
 

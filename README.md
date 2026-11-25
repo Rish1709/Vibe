@@ -4,11 +4,11 @@ A social networking platform (posts, feed, stories, real-time chat, notification
 production-grade backend engineering: indexed MongoDB access patterns, Redis caching, asynchronous
 processing with BullMQ, and horizontally scalable real-time messaging.
 
-**Design docs:** [architecture](docs/architecture.md) · [database design](docs/database-design.md) ·
-[API design](docs/api-design.md) · [caching strategy](docs/caching-strategy.md) ·
-[scalability](docs/scalability.md) · [engineering decisions](docs/engineering-decisions.md) ·
-[interview notes](INTERVIEW_NOTES.md) (every subsystem, with the bugs found building it).
-Build log: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
+**Design docs:** [architecture](INTERVIEW/architecture.md) · [database design](INTERVIEW/database-design.md) ·
+[API design](INTERVIEW/api-design.md) · [caching strategy](INTERVIEW/caching-strategy.md) ·
+[scalability](INTERVIEW/scalability.md) · [engineering decisions](INTERVIEW/engineering-decisions.md) ·
+[interview notes](INTERVIEW/INTERVIEW_NOTES.md) (every subsystem, with the bugs found building it).
+Build log: [INTERVIEW/IMPLEMENTATION_PLAN.md](INTERVIEW/IMPLEMENTATION_PLAN.md).
 
 ## Repository layout
 
@@ -17,7 +17,7 @@ apps/api         Express 5 + TypeScript API, Socket.IO gateway and BullMQ worker
 apps/web         React 19 + Vite + Tailwind CSS 4 single-page app
 packages/shared  Zod schemas and types shared by API and web
 deploy/          nginx configuration for the web image
-docs/            Architecture and engineering documentation
+INTERVIEW/       Design docs, interview notes and study guides
 Dockerfile       API/worker and web images (multi-stage, non-root)
 .github/         CI/CD: lint, types, tests, build, images (published to GHCR from main)
 ```

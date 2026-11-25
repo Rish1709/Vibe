@@ -1,7 +1,7 @@
 # Engineering decisions
 
 Each entry: the decision, what else was considered, why, and what it costs. Short on purpose; the
-measurements and bugs behind them are in [`INTERVIEW_NOTES.md`](../INTERVIEW_NOTES.md).
+measurements and bugs behind them are in [`INTERVIEW_NOTES.md`](INTERVIEW_NOTES.md).
 
 ### 1. A modular monolith, not microservices
 

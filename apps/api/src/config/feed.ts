@@ -1,5 +1,5 @@
 /**
- * Feed tuning. Values are starting points, not measured optima; see docs/caching-strategy.md and the
+ * Feed tuning. Values are starting points, not measured optima; see INTERVIEW/caching-strategy.md and the
  * feed benchmark (scripts/bench-feed.ts) for how they were chosen.
  */
 export const FeedConfig = {

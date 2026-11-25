@@ -24,7 +24,7 @@ const envSchema = z.object({
   // Per-IP budget before authentication. Raise it behind large NATs or in shared test environments.
   RATE_LIMIT_ANONYMOUS_PER_MINUTE: z.coerce.number().int().positive().default(600),
   // Authors with at least this many followers are not fanned out on write; their posts are merged
-  // into followers' feeds at read time. See docs/caching-strategy.md.
+  // into followers' feeds at read time. See INTERVIEW/caching-strategy.md.
   FEED_CELEBRITY_THRESHOLD: z.coerce.number().int().positive().default(10_000),
   // Namespaces BullMQ keys, so environments (or parallel test runs) sharing a Redis don't collide.
   QUEUE_PREFIX: z

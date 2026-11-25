@@ -4,7 +4,7 @@ Vibe is a social network: profiles, follows (with private accounts and requests)
 video, likes, reposts and quotes, threaded comments, a home feed, 24-hour stories, direct messages,
 notifications, search and discovery.
 
-This page is the map. Depth lives in [`INTERVIEW_NOTES.md`](../INTERVIEW_NOTES.md) (every subsystem:
+This page is the map. Depth lives in [`INTERVIEW_NOTES.md`](INTERVIEW_NOTES.md) (every subsystem:
 problem, alternatives, complexity, failure modes, bugs found) and the other docs in this folder.
 
 ## The system
