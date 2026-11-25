@@ -30,7 +30,7 @@ services:
     image: redis:8-alpine
     # noeviction is required by BullMQ: evicting a queue key silently loses jobs.
     # In production, cache and queues should live on separate Redis instances so the cache
-    # can use allkeys-lru (see INTERVIEW/caching-strategy.md).
+    # can use allkeys-lru.
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
     ports:
       - '6379:6379'
