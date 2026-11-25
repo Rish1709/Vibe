@@ -24,3 +24,6 @@ Thumbs.db
 !.archify/**/candidate.json
 .archify/**/review-*/
 .archify/**/visual-check*/
+
+# Interview prep notes: kept locally, not published
+INTERVIEW/
